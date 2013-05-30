@@ -21,43 +21,6 @@
 #include <selinux/selinux.h>
 #endif
 
-# if 0
-// from <linux/input.h>
-
-struct input_event {
-	struct timeval time;
-	__u16 type;
-	__u16 code;
-	__s32 value;
-};
-
-#define EVIOCGVERSION		_IOR('E', 0x01, int)			/* get driver version */
-#define EVIOCGID		_IOR('E', 0x02, struct input_id)	/* get device ID */
-#define EVIOCGKEYCODE		_IOR('E', 0x04, int[2])			/* get keycode */
-#define EVIOCSKEYCODE		_IOW('E', 0x04, int[2])			/* set keycode */
-
-#define EVIOCGNAME(len)		_IOC(_IOC_READ, 'E', 0x06, len)		/* get device name */
-#define EVIOCGPHYS(len)		_IOC(_IOC_READ, 'E', 0x07, len)		/* get physical location */
-#define EVIOCGUNIQ(len)		_IOC(_IOC_READ, 'E', 0x08, len)		/* get unique identifier */
-
-#define EVIOCGKEY(len)		_IOC(_IOC_READ, 'E', 0x18, len)		/* get global keystate */
-#define EVIOCGLED(len)		_IOC(_IOC_READ, 'E', 0x19, len)		/* get all LEDs */
-#define EVIOCGSND(len)		_IOC(_IOC_READ, 'E', 0x1a, len)		/* get all sounds status */
-#define EVIOCGSW(len)		_IOC(_IOC_READ, 'E', 0x1b, len)		/* get all switch states */
-
-#define EVIOCGBIT(ev,len)	_IOC(_IOC_READ, 'E', 0x20 + ev, len)	/* get event bits */
-#define EVIOCGABS(abs)		_IOR('E', 0x40 + abs, struct input_absinfo)		/* get abs value/limits */
-#define EVIOCSABS(abs)		_IOW('E', 0xc0 + abs, struct input_absinfo)		/* set abs value/limits */
-
-#define EVIOCSFF		_IOC(_IOC_WRITE, 'E', 0x80, sizeof(struct ff_effect))	/* send a force effect to a force feedback device */
-#define EVIOCRMFF		_IOW('E', 0x81, int)			/* Erase a force effect */
-#define EVIOCGEFFECTS		_IOR('E', 0x84, int)			/* Report number of effects playable at the same time */
-
-#define EVIOCGRAB		_IOW('E', 0x90, int)			/* Grab/Release device */
-
-// end <linux/input.h>
-#endif 
-
 int sockfd;
 int newsockfd;
 socklen_t clilen;
@@ -152,11 +115,6 @@ int close_server()
 {
 	return 0;
 }
-
-
-
-
-
 
 
 static struct pollfd *ufds;
@@ -815,15 +773,6 @@ static int getevent(int argc, char *argv[])
 
 
 
-
-
-
-
-
-
-
-
-
 #define TOUCHSCREEN_DEV_NAME "TSC2004 Touchscreen"
 
 struct touchscreen_device_events_prop {
@@ -846,11 +795,6 @@ struct touchscreen_device {
 };
 
 struct touchscreen_device touchscreen;
-
-
-
-
-
 
 static int touchscreen_get_events_prop(int fd, struct touchscreen_device* pdev)
 {
@@ -875,86 +819,9 @@ static int touchscreen_get_events_prop(int fd, struct touchscreen_device* pdev)
 			return 1;
 		}
 	}
-/*
-	res2 = 0;
-	switch(i) {
-	case EV_KEY:
-		res2 = ioctl(fd, EVIOCGKEY(res), bits + bits_size);
-		label = "KEY";
-		bit_labels = key_labels;
-		break;
-	case EV_REL:
-		label = "REL";
-		bit_labels = rel_labels;
-		break;
-	case EV_ABS:
-		label = "ABS";
-		bit_labels = abs_labels;
-		break;
-	case EV_MSC:
-		label = "MSC";
-		bit_labels = msc_labels;
-		break;
-	case EV_LED:
-		res2 = ioctl(fd, EVIOCGLED(res), bits + bits_size);
-		label = "LED";
-		bit_labels = led_labels;
-		break;
-	case EV_SND:
-		res2 = ioctl(fd, EVIOCGSND(res), bits + bits_size);
-		label = "SND";
-		bit_labels = snd_labels;
-		break;
-	case EV_SW:
-		res2 = ioctl(fd, EVIOCGSW(bits_size), bits + bits_size);
-		label = "SW ";
-		bit_labels = sw_labels;
-		break;
-	case EV_REP:
-		label = "REP";
-		bit_labels = rep_labels;
-		break;
-	case EV_FF:
-		label = "FF ";
-		bit_labels = ff_labels;
-		break;
-	case EV_PWR:
-		label = "PWR";
-		bit_labels = NULL;
-		break;
-	case EV_FF_STATUS:
-		label = "FFS";
-		bit_labels = ff_status_labels;
-		break;
-	default:
-		res2 = 0;
-		label = "???";
-		bit_labels = NULL;
-	}
-*/
 	for(j = 0; j < res; j++) {
 		for(k = 0; k < 8; k++)
 		if(bits[j] & 1 << k) {
-/*
-			char down;
-			if(j < res2 && (bits[j + bits_size] & 1 << k))
-				down = '*';
-			else
-				down = ' ';
-			if(count == 0)
-				printf("    %s (%04x):", label, i);
-			else if((count & (print_flags & PRINT_LABELS ? 0x3 : 0x7)) == 0 || i == EV_ABS)
-				printf("\n               ");
-			if(bit_labels && (print_flags & PRINT_LABELS)) {
-				bit_label = get_label(bit_labels, j * 8 + k);
-				if(bit_label)
-					printf(" %.20s%c%*s", bit_label, down, 20 - strlen(bit_label), "");
-				else
-					printf(" %04x%c                ", j * 8 + k, down);
-			} else {
-				printf(" %04x%c", j * 8 + k, down);
-			}
-*/
 			if(i == EV_KEY) {
 				pdev->prop.key_desc = j * 8 + k;
 			}
@@ -964,11 +831,6 @@ static int touchscreen_get_events_prop(int fd, struct touchscreen_device* pdev)
 					fprintf(stderr, "failed to get absinfo\n");
 					return 2;
 				}
-/*
-				printf(" : value %d, min %d, max %d, fuzz %d, flat %d, resolution %d",
-					abs.value, abs.minimum, abs.maximum, abs.fuzz, abs.flat,
-					abs.resolution);
-*/
 				switch(j * 8 + k) {
 				case ABS_X:
 					memcpy(&pdev->prop.abs_x, &abs, sizeof(struct input_absinfo));
@@ -1088,7 +950,6 @@ static int find_input_device()
 				pdev->prop.abs_pressure.flat,
 				pdev->prop.abs_pressure.resolution);
 /*
-			//ioctl(fd, EVIOCGABS(j * 8 + k), &abs)
 			print_flags |= PRINT_ALL_INFO;
 
 			printf("add device %d: %s\n", nfds, device);
@@ -1116,14 +977,11 @@ device_names[nfds]
 	return 1; // error if not found
 }
 
-//static int sendevent(int argc, char *argv[])
 static int sendevent(const char* dev, struct input_event* events, int count)
 {
 	int i;
 	int fd;
-//	int ret;
 	int version;
-//	struct input_event event;
 
 	fd = open(dev, O_RDWR);
 	if(fd < 0) {
@@ -1134,12 +992,6 @@ static int sendevent(const char* dev, struct input_event* events, int count)
 		fprintf(stderr, "could not get driver version for %s, %s\n", dev, strerror(errno));
 		return 1;
 	}
-	/*
-	memset(&event, 0, sizeof(event));
-	event.type = atoi(argv[2]);
-	event.code = atoi(argv[3]);
-	event.value = atoi(argv[4]);
-	*/
 	for(i = 0; i < count; i++) {
 		int ret = write(fd, &events[i], sizeof(events[0]));
 		if(ret < sizeof(events[0])) {
@@ -1152,34 +1004,11 @@ static int sendevent(const char* dev, struct input_event* events, int count)
 	return 0;
 }
 
-//x = (val - min)*res/(max-min+1)
-
 static uint32_t convert_touch_value(float val, struct input_absinfo info, uint16_t resolution)
 {
 	return val * (info.maximum-info.minimum+1) / resolution + info.minimum;
 }
 
-/*
-	DOWN: x,y,pressure()
-	MOVE: x,y
-	UP: pressure()
-*/
-/*
-/dev/input/event1: EV_KEY       BTN_TOUCH            DOWN                
-/dev/input/event1: EV_ABS       ABS_X                000001ad            
-/dev/input/event1: EV_ABS       ABS_Y                00000d25            
-/dev/input/event1: EV_ABS       ABS_PRESSURE         0000007e            
-/dev/input/event1: EV_SYN       SYN_REPORT           00000000
-
-/dev/input/event1: EV_ABS       ABS_X                000001ae            
-/dev/input/event1: EV_ABS       ABS_Y                00000d07            
-/dev/input/event1: EV_ABS       ABS_PRESSURE         00000098            
-/dev/input/event1: EV_SYN       SYN_REPORT           00000000
-
-/dev/input/event1: EV_KEY       BTN_TOUCH            UP                  
-/dev/input/event1: EV_ABS       ABS_PRESSURE         00000000            
-/dev/input/event1: EV_SYN       SYN_REPORT           00000000
-*/
 static int handle_request(const char* req)
 {
 	struct input_event events[10];
@@ -1266,7 +1095,6 @@ int touch_event_srv_main(int argc, char *argv[])
 		exit(1);
 	}
 	while(fgets(req, sizeof(req), file) != NULL) {
-//		printf("req: %s, len: %d\n",req, strlen(req));
 		handle_request(req);
 		if(!strlen(req))
 			break;
@@ -1274,42 +1102,5 @@ int touch_event_srv_main(int argc, char *argv[])
 	fclose(file);
 	return 0;
 }
-
-/*
-
-/dev/input/event1: EV_KEY       BTN_TOUCH            DOWN                
-/dev/input/event1: EV_ABS       ABS_X                000001ad            
-/dev/input/event1: EV_ABS       ABS_Y                00000d25            
-/dev/input/event1: EV_ABS       ABS_PRESSURE         0000007e            
-/dev/input/event1: EV_SYN       SYN_REPORT           00000000
-
-/dev/input/event1: EV_ABS       ABS_X                000001ae            
-/dev/input/event1: EV_ABS       ABS_Y                00000d07            
-/dev/input/event1: EV_ABS       ABS_PRESSURE         00000098            
-/dev/input/event1: EV_SYN       SYN_REPORT           00000000
-
-/dev/input/event1: EV_KEY       BTN_TOUCH            UP                  
-/dev/input/event1: EV_ABS       ABS_PRESSURE         00000000            
-/dev/input/event1: EV_SYN       SYN_REPORT           00000000
-
-
-
-/dev/input/event1: 0001 014a 00000001
-/dev/input/event1: 0003 0000 000001ad
-/dev/input/event1: 0003 0001 00000d25
-/dev/input/event1: 0003 0018 0000007e
-/dev/input/event1: 0000 0000 00000000
-
-/dev/input/event1: 0003 0000 000001ae
-/dev/input/event1: 0003 0001 00000d07
-/dev/input/event1: 0003 0018 00000098
-/dev/input/event1: 0000 0000 00000000
-
-/dev/input/event1: 0001 014a 00000000
-/dev/input/event1: 0003 0018 00000000
-/dev/input/event1: 0000 0000 00000000
-
-
-*/
 
 
