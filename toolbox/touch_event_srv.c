@@ -21,107 +21,33 @@
 #include <selinux/selinux.h>
 #endif
 
-int sockfd;
-int newsockfd;
-socklen_t clilen;
-struct sockaddr_in serv_addr;
-struct sockaddr_in cli_addr;
+#define TOUCH_SRV_PORTNO	2301
+#define TOUCH_SRV_MAX_BACKLOG_CONNECTIONS 5
+#define TOUCH_SRV_SOCKET_BUFF_SIZE	512
 
-static int start_server();
-static int close_server();
-static void nonblock(int sockfd);
-static int wait_for_connection();
-static int handle_request(const char* data);
+#define TOUCHSCREEN_DEV_NAME "TSC2004 Touchscreen"
+#define TOUCHSCREEN_RESOLUTION_X (640)
+#define TOUCHSCREEN_RESOLUTION_Y (480)
+#define TOUCHSCREEN_RESOLUTION_PRESSURE (1)
 
-void nonblock(int sockfd)
-{
-    int opts;
-    opts = fcntl(sockfd, F_GETFL);
-    if(opts < 0)
-    {
-        fprintf(stderr, "fcntl(F_GETFL) failed\n");
-    }
-    opts = (opts | O_NONBLOCK);
-    if(fcntl(sockfd, F_SETFL, opts) < 0) 
-    {
-        fprintf(stderr, "fcntl(F_SETFL) failed\n");
-    }
-}
+struct touchscreen_device_events_prop {
+	uint16_t key_desc;
+	struct input_absinfo abs_x;
+	struct input_absinfo abs_y;
+	struct input_absinfo abs_pressure;
+};
 
-int start_server(int portno)
-{
-     int BUFLEN = 2000;
-     char buffer[BUFLEN];
-     int n, i;
-     int one = 1;
- 
-     sockfd = socket(AF_INET, SOCK_STREAM, 0);
-     if (sockfd < 0) {
-        perror("ERROR create socket");
-        return 1;
-     }
-     setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);    //allow reuse of port
-     //bind to a local address
-     bzero((char *) &serv_addr, sizeof(serv_addr));
-     serv_addr.sin_family = AF_INET;
-     serv_addr.sin_addr.s_addr = INADDR_ANY;
-     serv_addr.sin_port = htons(portno);
-     if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
-        perror("ERROR on bind");
-        return 2;
-     }
+struct touchscreen_device {
+	char* dev_name;
+	int fd;
+	int events;
+	int version;
+	char location[80];
+	char idstr[80];
+	struct input_id id;
 
-     return 0;
-}
-
-int wait_for_connection()
-{
-     int BUFLEN = 2000;
-     char buffer[BUFLEN];
-     int n, i;
-     int one = 1;
-     //listen marks the socket as passive socket listening to incoming connections, 
-     //it allows max 5 backlog connections: backlog connections are pending in queue
-     //if pending connections are more than 5, later request may be ignored
-     listen(sockfd,5);
-     //accept incoming connections
-     clilen = sizeof(cli_addr);
-     newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
-     //nonblock(newsockfd);        //if we want to set the socket as nonblock, we can uncomment this
-     if (newsockfd < 0) {
-        perror("ERROR on accept");
-        exit(1);
-     }
-     printf("connection accepted\n");
-     for (i = 0; i < 5; ++i) {
-         bzero(buffer,BUFLEN);
-         n = read(newsockfd,buffer,BUFLEN);
-         if (n < 0) {
-            perror("ERROR read from socket");
-         }
-         printf("received: %s",buffer); 
-         n = write(newsockfd, buffer, n);
-         printf("sent: %s", buffer);
-         if (n < 0) {
-            perror("ERROR write to socket");
-         }
-     }
-     close(newsockfd);
-     close(sockfd);
-     return 0; 
-}
-
-int close_server()
-{
-	return 0;
-}
-
-
-static struct pollfd *ufds;
-static char **device_names;
-static int nfds;
-
-const char* input_device;
+	struct touchscreen_device_events_prop prop;
+};
 
 enum {
     PRINT_DEVICE_ERRORS     = 1U << 0,
@@ -137,6 +63,11 @@ enum {
 
     PRINT_LABELS            = 1U << 16,
 };
+
+static struct pollfd *ufds;
+static char **device_names;
+static int nfds;
+const char* input_device;
 
 static const char *get_label(const struct label *labels, int value)
 {
@@ -771,32 +702,7 @@ static int getevent(int argc, char *argv[])
     return 0;
 }
 
-
-
-#define TOUCHSCREEN_DEV_NAME "TSC2004 Touchscreen"
-
-struct touchscreen_device_events_prop {
-	uint16_t key_desc;
-	struct input_absinfo abs_x;
-	struct input_absinfo abs_y;
-	struct input_absinfo abs_pressure;
-};
-
-struct touchscreen_device {
-	char* dev_name;
-	int fd;
-	int events;
-	int version;
-	char location[80];
-	char idstr[80];
-	struct input_id id;
-
-	struct touchscreen_device_events_prop prop;
-};
-
-struct touchscreen_device touchscreen;
-
-static int touchscreen_get_events_prop(int fd, struct touchscreen_device* pdev)
+static int touchscreen_get_events_prop(struct touchscreen_device* pdev)
 {
     uint8_t *bits = NULL;
     ssize_t bits_size = 0;
@@ -809,7 +715,7 @@ static int touchscreen_get_events_prop(int fd, struct touchscreen_device* pdev)
     for(i = EV_KEY; i <= EV_MAX; i++) { // skip EV_SYN since we cannot query its available codes
 	int count = 0;
 	while(1) {
-		res = ioctl(fd, EVIOCGBIT(i, bits_size), bits);
+		res = ioctl(pdev->fd, EVIOCGBIT(i, bits_size), bits);
 		if(res < bits_size)
 			break;
 		bits_size = res + 16;
@@ -827,7 +733,7 @@ static int touchscreen_get_events_prop(int fd, struct touchscreen_device* pdev)
 			}
 			if(i == EV_ABS) {
 			        struct input_absinfo abs;
-			        if(ioctl(fd, EVIOCGABS(j * 8 + k), &abs) != 0) {
+			        if(ioctl(pdev->fd, EVIOCGABS(j * 8 + k), &abs) != 0) {
 					fprintf(stderr, "failed to get absinfo\n");
 					return 2;
 				}
@@ -856,7 +762,7 @@ static int touchscreen_get_events_prop(int fd, struct touchscreen_device* pdev)
     return 0;
 }
 
-static int find_input_device()
+static int find_input_device(struct touchscreen_device* pdev)
 {
 	int c;
 	int i;
@@ -867,7 +773,6 @@ static int find_input_device()
 	char *newline = "\n";
 	uint16_t get_switch = 0;
 	struct input_event event;
-	int version;
 	int print_flags = 0;
 	int print_flags_set = 0;
 	int dont_block = -1;
@@ -876,20 +781,18 @@ static int find_input_device()
 	int64_t last_sync_time = 0;
 	const char *device = NULL;
 	const char *device_path = "/dev/input";
-	struct touchscreen_device* pdev = &touchscreen;
+
+	if(!pdev) {
+		fprintf(stderr, "%s :: null argument\n", __FUNCTION__);
+		return -1;
+	}
 
 	nfds = 1;
 	ufds = calloc(1, sizeof(ufds[0]));
 	ufds[0].fd = inotify_init();
 	ufds[0].events = POLLIN;
-/*
-        print_flags |= PRINT_DEVICE_ERRORS | PRINT_DEVICE | PRINT_DEVICE_NAME;
-        print_flags |= PRINT_DEVICE_INFO | PRINT_VERSION;
-        print_flags |= PRINT_HID_DESCRIPTOR;
-        print_flags |= PRINT_DEVICE_ERRORS | PRINT_POSSIBLE_EVENTS | PRINT_INPUT_PROPS;
-        print_flags |= PRINT_ALL_INFO;
-*/
-        print_device = 1;
+	print_device = 1;
+
 	res = inotify_add_watch(ufds[0].fd, device_path, IN_DELETE | IN_CREATE);
         if(res < 0) {
             fprintf(stderr, "could not add watch for %s, %s\n", device_path, strerror(errno));
@@ -898,7 +801,7 @@ static int find_input_device()
         res = scan_dir(device_path, print_flags);
         if(res < 0) {
             fprintf(stderr, "scan dir failed for %s\n", device_path);
-            return 1;
+            return 2;
         }
 
 	printf( "device scan results:\n");
@@ -911,18 +814,18 @@ static int find_input_device()
 
 		printf("dev name #%d: %s\n", i, device_names[i]);
 		if(strstr(name, TOUCHSCREEN_DEV_NAME)) {
-			touchscreen.dev_name = device_names[i];
-			printf("device %s found: %s\n", name, touchscreen.dev_name);
+			pdev->fd = fd;
+			pdev->dev_name = device_names[i];
+			printf("device %s found: %s\n", name, pdev->dev_name);
 
-			touchscreen.dev_name = device_names[i];
-			touchscreen.location[sizeof(touchscreen.location) - 1] = '\0';
-			ioctl(fd, EVIOCGPHYS(sizeof(touchscreen.location) - 1), &touchscreen.location);
-			touchscreen.idstr[sizeof(touchscreen.idstr) - 1] = '\0';
-			ioctl(fd, EVIOCGUNIQ(sizeof(touchscreen.idstr) - 1), &touchscreen.idstr);
-			ioctl(fd, EVIOCGVERSION, &touchscreen.version);
-			ioctl(fd, EVIOCGID, &touchscreen.id);
+			pdev->location[sizeof(pdev->location) - 1] = '\0';
+			ioctl(fd, EVIOCGPHYS(sizeof(pdev->location) - 1), &pdev->location);
+			pdev->idstr[sizeof(pdev->idstr) - 1] = '\0';
+			ioctl(fd, EVIOCGUNIQ(sizeof(pdev->idstr) - 1), &pdev->idstr);
+			ioctl(fd, EVIOCGVERSION, &pdev->version);
+			ioctl(fd, EVIOCGID, &pdev->id);
 
-			if(touchscreen_get_events_prop(fd, &touchscreen))
+			if(touchscreen_get_events_prop(pdev))
 			{
 				fprintf(stderr, "could not get touchscreen props\n");
 				return 1;
@@ -949,52 +852,52 @@ static int find_input_device()
 				pdev->prop.abs_pressure.fuzz,
 				pdev->prop.abs_pressure.flat,
 				pdev->prop.abs_pressure.resolution);
-/*
-			print_flags |= PRINT_ALL_INFO;
 
-			printf("add device %d: %s\n", nfds, device);
+			print_flags |= PRINT_ALL_INFO;
 			printf("  bus:      %04x\n"
 			       "  vendor    %04x\n"
 			       "  product   %04x\n"
 			       "  version   %04x\n",
-				touchscreen.id.bustype, touchscreen.id.vendor,
-				touchscreen.id.product, touchscreen.id.version);
-device_names[nfds]
+				pdev->id.bustype, pdev->id.vendor,
+				pdev->id.product, pdev->id.version);
+
 			printf("  name:     \"%s\"\n", name);
 			printf("  location: \"%s\"\n"
-			       "  id:       \"%s\"\n", touchscreen.location, touchscreen.idstr);
+			       "  id:       \"%s\"\n", pdev->location, pdev->idstr);
 			printf("  version:  %d.%d.%d\n",
-			       version >> 16, (version >> 8) & 0xff, version & 0xff);
+					pdev->version >> 16, (pdev->version >> 8) & 0xff, pdev->version & 0xff);
 			print_possible_events(fd, print_flags);
 			print_input_props(fd);
-			print_hid_descriptor(touchscreen.id.bustype, 
-					     touchscreen.id.vendor,
-					     touchscreen.id.product);
-*/
+			print_hid_descriptor(pdev->id.bustype,
+					     pdev->id.vendor,
+					     pdev->id.product);
 			return 0;
 		}
 	}
 	return 1; // error if not found
 }
 
-static int sendevent(const char* dev, struct input_event* events, int count)
+static int sendevent(struct touchscreen_device* pdev, struct input_event* events, int count)
 {
 	int i;
 	int fd;
 	int version;
 
-	fd = open(dev, O_RDWR);
+	fd = open(pdev->dev_name, O_RDWR);
 	if(fd < 0) {
-		fprintf(stderr, "could not open %s, %s\n", dev, strerror(errno));
+		fprintf(stderr, "could not open %s, %s\n",
+				pdev->dev_name, strerror(errno));
 		return 1;
 	}
 	if (ioctl(fd, EVIOCGVERSION, &version)) {
-		fprintf(stderr, "could not get driver version for %s, %s\n", dev, strerror(errno));
+		fprintf(stderr, "could not get driver version for %s, %s\n",
+				pdev->dev_name, strerror(errno));
 		return 1;
 	}
 	for(i = 0; i < count; i++) {
-		int ret = write(fd, &events[i], sizeof(events[0]));
-		if(ret < sizeof(events[0])) {
+		struct input_event* event = &events[i];
+		int ret = write(fd, event, sizeof(struct input_event));
+		if(ret < sizeof(struct input_event)) {
 			fprintf(stderr, "write event failed, %s\n", strerror(errno));
 			close(fd);
 			return -1;
@@ -1009,7 +912,7 @@ static uint32_t convert_touch_value(float val, struct input_absinfo info, uint16
 	return val * (info.maximum-info.minimum+1) / resolution + info.minimum;
 }
 
-static int handle_request(const char* req)
+static int handle_request(struct touchscreen_device* pdev, const char* req)
 {
 	struct input_event events[10];
 	float x, y, pressure;
@@ -1027,13 +930,13 @@ static int handle_request(const char* req)
 		events[0].value = 1; // DOWN
 		events[1].type = EV_ABS;
 		events[1].code = ABS_X;
-		events[1].value = convert_touch_value(x, touchscreen.prop.abs_x, 640);
+		events[1].value = convert_touch_value(x, pdev->prop.abs_x, TOUCHSCREEN_RESOLUTION_X);
 		events[2].type = EV_ABS;
 		events[2].code = ABS_Y;
-		events[2].value = convert_touch_value(y, touchscreen.prop.abs_y, 480);
+		events[2].value = convert_touch_value(y, pdev->prop.abs_y, TOUCHSCREEN_RESOLUTION_Y);
 		events[3].type = EV_ABS;
 		events[3].code = ABS_PRESSURE;
-		events[3].value = convert_touch_value(pressure, touchscreen.prop.abs_pressure, 1);
+		events[3].value = convert_touch_value(pressure, pdev->prop.abs_pressure, TOUCHSCREEN_RESOLUTION_PRESSURE);
 		events[4].type = EV_SYN;
 		events[4].code = SYN_REPORT;
 		events[4].value = 0;
@@ -1045,13 +948,13 @@ static int handle_request(const char* req)
 
 		events[0].type = EV_ABS;
 		events[0].code = ABS_X;
-		events[0].value = convert_touch_value(x, touchscreen.prop.abs_x, 640);
+		events[0].value = convert_touch_value(x, pdev->prop.abs_x, TOUCHSCREEN_RESOLUTION_X);
 		events[1].type = EV_ABS;
 		events[1].code = ABS_Y;
-		events[1].value = convert_touch_value(y, touchscreen.prop.abs_y, 480);
+		events[1].value = convert_touch_value(y, pdev->prop.abs_y, TOUCHSCREEN_RESOLUTION_Y);
 		events[2].type = EV_ABS;
 		events[2].code = ABS_PRESSURE;
-		events[2].value = convert_touch_value(pressure, touchscreen.prop.abs_pressure, 1);
+		events[2].value = convert_touch_value(pressure, pdev->prop.abs_pressure, TOUCHSCREEN_RESOLUTION_PRESSURE);
 		events[3].type = EV_SYN;
 		events[3].code = SYN_REPORT;
 		events[3].value = 0;
@@ -1066,7 +969,7 @@ static int handle_request(const char* req)
 		events[0].value = 0; // UP
 		events[1].type = EV_ABS;
 		events[1].code = ABS_PRESSURE;
-		events[1].value = convert_touch_value(pressure, touchscreen.prop.abs_pressure, 1);
+		events[1].value = convert_touch_value(pressure, pdev->prop.abs_pressure, TOUCHSCREEN_RESOLUTION_PRESSURE);
 		events[2].type = EV_SYN;
 		events[2].code = SYN_REPORT;
 		events[2].value = 0;
@@ -1076,28 +979,147 @@ static int handle_request(const char* req)
 		fprintf(stderr, "args error\n");
 		return -1;
 	}
-	sendevent(touchscreen.dev_name, events, count);
+	return sendevent(pdev, events, count);
+}
+
+
+
+
+
+socklen_t clilen;
+struct sockaddr_in serv_addr;
+struct sockaddr_in cli_addr;
+
+static void nonblock(int sockfd)
+{
+    int opts;
+    opts = fcntl(sockfd, F_GETFL);
+    if(opts < 0)
+    {
+        fprintf(stderr, "fcntl(F_GETFL) failed\n");
+    }
+    opts = (opts | O_NONBLOCK);
+    if(fcntl(sockfd, F_SETFL, opts) < 0)
+    {
+        fprintf(stderr, "fcntl(F_SETFL) failed\n");
+    }
+}
+
+static int start_server(int* psockfd, int portno)
+{
+	int sockfd;
+	int n, i;
+	int one = 1;
+
+	sockfd = socket(AF_INET, SOCK_STREAM, 0);
+	if (sockfd < 0) {
+		perror("ERROR create socket");
+		return 1;
+	}
+	setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);    //allow reuse of port
+	//bind to a local address
+	bzero((char *) &serv_addr, sizeof(serv_addr));
+	serv_addr.sin_family = AF_INET;
+	serv_addr.sin_addr.s_addr = INADDR_ANY;
+	serv_addr.sin_port = htons(portno);
+	if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
+		perror("ERROR on bind");
+		return 2;
+	}
+	*psockfd = sockfd;
+
 	return 0;
 }
 
+static int wait_for_connection(int sockfd, int* pnewsockfd)
+{
+	int newsockfd;
+
+	int n, i;
+	int one = 1;
+	//listen marks the socket as passive socket listening to incoming connections, 
+	//it allows max 5 backlog connections: backlog connections are pending in queue
+	//if pending connections are more than 5, later request may be ignored
+	listen(sockfd, TOUCH_SRV_MAX_BACKLOG_CONNECTIONS);
+	//accept incoming connections
+	clilen = sizeof(cli_addr);
+	newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
+	//nonblock(newsockfd);        //if we want to set the socket as nonblock, we can uncomment this
+	if (newsockfd < 0) {
+		perror("ERROR on accept");
+		return -1;
+	}
+	*pnewsockfd = newsockfd;
+	printf("connection accepted\n");
+	return 0;
+}
+
+static int close_server(int sockfd, int newsockfd)
+{
+	close(newsockfd);
+	close(sockfd);
+	return 0;
+}
+
+int running = 1;
+
 int touch_event_srv_main(int argc, char *argv[])
 {
-	FILE* file;
-	char req[256] = { "request" };
+	char req[TOUCH_SRV_SOCKET_BUFF_SIZE];
+	struct touchscreen_device touchscreen;
+	int sockfd, newsockfd;
+	int i, n;
 
-	if(find_input_device()) {
-		printf("could not find %s device, exiting...\n", TOUCHSCREEN_DEV_NAME);
+	FILE* file;
+
+	if(find_input_device(&touchscreen)) {
+		fprintf(stderr, "could not find %s device, exiting...\n",
+				TOUCHSCREEN_DEV_NAME);
 		exit(1);
 	}
+
+	if(start_server(&sockfd, TOUCH_SRV_PORTNO)) {
+		fprintf(stderr, "could not start server on port %d, exiting...\n",
+				TOUCH_SRV_PORTNO);
+		exit(2);
+	}
+
+	if(wait_for_connection(sockfd, &newsockfd)) {
+		fprintf(stderr, "wait for connection failed, exiting...\n");
+		exit(3);
+	}
+
+	while(running) {
+//	for (i = 0; i < TOUCH_SRV_MAX_BACKLOG_CONNECTIONS; ++i) {
+		bzero(req,TOUCH_SRV_SOCKET_BUFF_SIZE);
+		n = read(newsockfd, req, TOUCH_SRV_SOCKET_BUFF_SIZE);
+		if (n < 0) {
+			fprintf(stderr, "ERROR read from socket\n\n\n");
+			perror("ERROR read from socket");
+			running = 0;
+		}
+		printf("received: %s", req);
+		handle_request(&touchscreen, req);
+		write(newsockfd, "ok\n", 3);
+//		n = write(newsockfd, buffer, n);
+//		printf("sent: %s", buffer);
+//		if (n < 0) {
+//			perror("ERROR write to socket");
+//		}
+	}
+
+	close_server(sockfd, newsockfd);
+	return 0;
+
 	file = fopen(argv[1], "r");
 	if(file == NULL) {
 		printf("no request file exist: %s\n", argv[1]);
 		exit(1);
 	}
 	while(fgets(req, sizeof(req), file) != NULL) {
-		handle_request(req);
 		if(!strlen(req))
 			break;
+		handle_request(&touchscreen, req);
 	};
 	fclose(file);
 	return 0;
