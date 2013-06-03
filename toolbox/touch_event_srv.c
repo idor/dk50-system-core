@@ -961,7 +961,7 @@ static int handle_request(struct touchscreen_device* pdev, const char* req)
 		count = 4;
 		break;
 	case 'U':
-		sscanf(req+2, "%f", &pressure);
+		sscanf(req+2, "%f %f %f", &x, &y, &pressure);
 		printf("UP: %f\n", pressure);
 
 		events[0].type = EV_KEY;
