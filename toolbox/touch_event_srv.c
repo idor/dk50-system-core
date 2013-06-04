@@ -30,6 +30,12 @@
 #define TOUCHSCREEN_RESOLUTION_Y (480)
 #define TOUCHSCREEN_RESOLUTION_PRESSURE (1)
 
+#define LOG(...) do { fprintf(stderr, __VA_ARGS__); } while(0)
+#define LOG_V(string, ...)
+#define LOG_D LOG
+#define LOG_I LOG
+#define LOG_E LOG
+
 struct touchscreen_device_events_prop {
 	uint16_t key_desc;
 	struct input_absinfo abs_x;
@@ -880,10 +886,10 @@ static int find_input_device(struct touchscreen_device* pdev)
 static int sendevent(struct touchscreen_device* pdev, struct input_event* events, int count)
 {
 	int i;
-	int fd;
+	int fd = pdev->fd;
 	int version;
 
-	fd = open(pdev->dev_name, O_RDWR);
+//	fd = open(pdev->dev_name, O_RDWR);
 	if(fd < 0) {
 		fprintf(stderr, "could not open %s, %s\n",
 				pdev->dev_name, strerror(errno));
@@ -899,11 +905,11 @@ static int sendevent(struct touchscreen_device* pdev, struct input_event* events
 		int ret = write(fd, event, sizeof(struct input_event));
 		if(ret < sizeof(struct input_event)) {
 			fprintf(stderr, "write event failed, %s\n", strerror(errno));
-			close(fd);
+//			close(fd);
 			return -1;
 		}
 	}
-	close(fd);
+//	close(fd);
 	return 0;
 }
 
@@ -912,78 +918,107 @@ static uint32_t convert_touch_value(float val, struct input_absinfo info, uint16
 	return val * (info.maximum-info.minimum+1) / resolution + info.minimum;
 }
 
-static int handle_request(struct touchscreen_device* pdev, const char* req)
+static int handle_request(struct touchscreen_device* pdev, const char* req, int req_len)
 {
 	struct input_event events[10];
 	float x, y, pressure;
 	int count;
+	const char* p = req;
+	int ret = 0;
 
-	memset(events, 0, sizeof(events));
-	switch(*req)
+	while(1)
 	{
-	case 'D':
-		sscanf(req+2, "%f %f %f", &x, &y, &pressure);
-		printf("DOWN: %f %f %f\n", x, y, pressure);
+		const char* eol = strstr(p, "\n");
+		int len;
 
-		events[0].type = EV_KEY;
-		events[0].code = BTN_TOUCH;
-		events[0].value = 1; // DOWN
-		events[1].type = EV_ABS;
-		events[1].code = ABS_X;
-		events[1].value = convert_touch_value(x, pdev->prop.abs_x, TOUCHSCREEN_RESOLUTION_X);
-		events[2].type = EV_ABS;
-		events[2].code = ABS_Y;
-		events[2].value = convert_touch_value(y, pdev->prop.abs_y, TOUCHSCREEN_RESOLUTION_Y);
-		events[3].type = EV_ABS;
-		events[3].code = ABS_PRESSURE;
-		events[3].value = convert_touch_value(pressure, pdev->prop.abs_pressure, TOUCHSCREEN_RESOLUTION_PRESSURE);
-		events[4].type = EV_SYN;
-		events[4].code = SYN_REPORT;
-		events[4].value = 0;
-		count = 5;
-		break;
-	case 'M':
-		sscanf(req+2, "%f %f %f", &x, &y, &pressure);
-		printf("MOVE: %f %f %f\n", x, y, pressure);
+		if(!eol) {
+			LOG_E("can't find EOL in request");
+			return 1;
+		}
+		len = (eol - p);
+		if(len > req_len)
+		{
+			LOG_E("EOL is found beyond req_len");
+			return 2;
+		}
+		LOG_V("handling message (length: %d)\n", len);
 
-		events[0].type = EV_ABS;
-		events[0].code = ABS_X;
-		events[0].value = convert_touch_value(x, pdev->prop.abs_x, TOUCHSCREEN_RESOLUTION_X);
-		events[1].type = EV_ABS;
-		events[1].code = ABS_Y;
-		events[1].value = convert_touch_value(y, pdev->prop.abs_y, TOUCHSCREEN_RESOLUTION_Y);
-		events[2].type = EV_ABS;
-		events[2].code = ABS_PRESSURE;
-		events[2].value = convert_touch_value(pressure, pdev->prop.abs_pressure, TOUCHSCREEN_RESOLUTION_PRESSURE);
-		events[3].type = EV_SYN;
-		events[3].code = SYN_REPORT;
-		events[3].value = 0;
-		count = 4;
-		break;
-	case 'U':
-		sscanf(req+2, "%f %f %f", &x, &y, &pressure);
-		printf("UP: %f\n", pressure);
+		memset(events, 0, sizeof(events));
+		if(!len) {
+			LOG_E("args error (empty request)\n");
+			return 0;
+		}
+		if(len <= 2) {
+			LOG_E("args error, len: %d\n", len);
+			return 3;
+		}
+		switch(*p)
+		{
+		case 'D':
+			sscanf(p+2, "%f %f %f", &x, &y, &pressure);
+			LOG_D("DOWN: %f %f %f\n", x, y, pressure);
 
-		events[0].type = EV_KEY;
-		events[0].code = BTN_TOUCH;
-		events[0].value = 0; // UP
-		events[1].type = EV_ABS;
-		events[1].code = ABS_PRESSURE;
-		events[1].value = convert_touch_value(pressure, pdev->prop.abs_pressure, TOUCHSCREEN_RESOLUTION_PRESSURE);
-		events[2].type = EV_SYN;
-		events[2].code = SYN_REPORT;
-		events[2].value = 0;
-		count = 3;
-		break;
-	default:
-		fprintf(stderr, "args error\n");
-		return -1;
+			events[0].type = EV_KEY;
+			events[0].code = BTN_TOUCH;
+			events[0].value = 1; // DOWN
+			events[1].type = EV_ABS;
+			events[1].code = ABS_X;
+			events[1].value = convert_touch_value(x, pdev->prop.abs_x, TOUCHSCREEN_RESOLUTION_X);
+			events[2].type = EV_ABS;
+			events[2].code = ABS_Y;
+			events[2].value = convert_touch_value(y, pdev->prop.abs_y, TOUCHSCREEN_RESOLUTION_Y);
+			events[3].type = EV_ABS;
+			events[3].code = ABS_PRESSURE;
+			events[3].value = convert_touch_value(pressure, pdev->prop.abs_pressure, TOUCHSCREEN_RESOLUTION_PRESSURE);
+			events[4].type = EV_SYN;
+			events[4].code = SYN_REPORT;
+			events[4].value = 0;
+			count = 5;
+			break;
+		case 'M':
+			sscanf(p+2, "%f %f %f", &x, &y, &pressure);
+			LOG_D("MOVE: %f %f %f\n", x, y, pressure);
+
+			events[0].type = EV_ABS;
+			events[0].code = ABS_X;
+			events[0].value = convert_touch_value(x, pdev->prop.abs_x, TOUCHSCREEN_RESOLUTION_X);
+			events[1].type = EV_ABS;
+			events[1].code = ABS_Y;
+			events[1].value = convert_touch_value(y, pdev->prop.abs_y, TOUCHSCREEN_RESOLUTION_Y);
+			events[2].type = EV_ABS;
+			events[2].code = ABS_PRESSURE;
+			events[2].value = convert_touch_value(pressure, pdev->prop.abs_pressure, TOUCHSCREEN_RESOLUTION_PRESSURE);
+			events[3].type = EV_SYN;
+			events[3].code = SYN_REPORT;
+			events[3].value = 0;
+			count = 4;
+			break;
+		case 'U':
+			sscanf(p+2, "%f %f %f", &x, &y, &pressure);
+			LOG_D("UP: %f\n", pressure);
+
+			events[0].type = EV_KEY;
+			events[0].code = BTN_TOUCH;
+			events[0].value = 0; // UP
+			events[1].type = EV_ABS;
+			events[1].code = ABS_PRESSURE;
+			events[1].value = convert_touch_value(pressure, pdev->prop.abs_pressure, TOUCHSCREEN_RESOLUTION_PRESSURE);
+			events[2].type = EV_SYN;
+			events[2].code = SYN_REPORT;
+			events[2].value = 0;
+			count = 3;
+			break;
+		default:
+			LOG_E(stderr, "args error\n");
+			return 4;
+		}
+		ret = sendevent(pdev, events, count);
+		p = eol+1;
+		if(*p == '\0')
+			break;
 	}
-	return sendevent(pdev, events, count);
+	return ret;
 }
-
-
-
 
 
 socklen_t clilen;
@@ -996,12 +1031,12 @@ static void nonblock(int sockfd)
     opts = fcntl(sockfd, F_GETFL);
     if(opts < 0)
     {
-        fprintf(stderr, "fcntl(F_GETFL) failed\n");
+        LOG_E("fcntl(F_GETFL) failed\n");
     }
     opts = (opts | O_NONBLOCK);
     if(fcntl(sockfd, F_SETFL, opts) < 0)
     {
-        fprintf(stderr, "fcntl(F_SETFL) failed\n");
+        LOG_E("fcntl(F_SETFL) failed\n");
     }
 }
 
@@ -1013,21 +1048,21 @@ static int start_server(int* psockfd, int portno)
 
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
 	if (sockfd < 0) {
-		perror("ERROR create socket");
+		LOG_E("ERROR create socket");
 		return 1;
 	}
 	setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);    //allow reuse of port
 	//bind to a local address
 	bzero((char *) &serv_addr, sizeof(serv_addr));
 	serv_addr.sin_family = AF_INET;
-	serv_addr.sin_addr.s_addr = INADDR_ANY;
+	serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 	serv_addr.sin_port = htons(portno);
 	if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
-		perror("ERROR on bind");
+		LOG_E("ERROR on bind");
 		return 2;
 	}
 	*psockfd = sockfd;
-
+	LOG_I("server started\n");
 	return 0;
 }
 
@@ -1046,11 +1081,11 @@ static int wait_for_connection(int sockfd, int* pnewsockfd)
 	newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
 	//nonblock(newsockfd);        //if we want to set the socket as nonblock, we can uncomment this
 	if (newsockfd < 0) {
-		perror("ERROR on accept");
+		LOG_E("ERROR on accept");
 		return -1;
 	}
 	*pnewsockfd = newsockfd;
-	printf("connection accepted\n");
+	LOG_I("connection accepted\n");
 	return 0;
 }
 
@@ -1058,70 +1093,69 @@ static int close_server(int sockfd, int newsockfd)
 {
 	close(newsockfd);
 	close(sockfd);
+	LOG_I("connection closed\n");
 	return 0;
 }
 
-int running = 1;
+int running;
 
 int touch_event_srv_main(int argc, char *argv[])
 {
 	char req[TOUCH_SRV_SOCKET_BUFF_SIZE];
+	char res[TOUCH_SRV_SOCKET_BUFF_SIZE];
 	struct touchscreen_device touchscreen;
 	int sockfd, newsockfd;
 	int i, n;
 
 	FILE* file;
 
+	running = 1;
+
 	if(find_input_device(&touchscreen)) {
-		fprintf(stderr, "could not find %s device, exiting...\n",
+		LOG_E("could not find %s device, exiting...",
 				TOUCHSCREEN_DEV_NAME);
 		exit(1);
 	}
 
-	if(start_server(&sockfd, TOUCH_SRV_PORTNO)) {
-		fprintf(stderr, "could not start server on port %d, exiting...\n",
-				TOUCH_SRV_PORTNO);
-		exit(2);
-	}
-
-	if(wait_for_connection(sockfd, &newsockfd)) {
-		fprintf(stderr, "wait for connection failed, exiting...\n");
-		exit(3);
-	}
-
-	while(running) {
-//	for (i = 0; i < TOUCH_SRV_MAX_BACKLOG_CONNECTIONS; ++i) {
-		bzero(req,TOUCH_SRV_SOCKET_BUFF_SIZE);
-		n = read(newsockfd, req, TOUCH_SRV_SOCKET_BUFF_SIZE);
-		if (n < 0) {
-			fprintf(stderr, "ERROR read from socket\n\n\n");
-			perror("ERROR read from socket");
-			running = 0;
+	do {
+		if(start_server(&sockfd, TOUCH_SRV_PORTNO)) {
+			LOG_E("could not start server on port %d, exiting...",
+					TOUCH_SRV_PORTNO);
+			exit(2);
 		}
-		printf("received: %s", req);
-		handle_request(&touchscreen, req);
-		write(newsockfd, "ok\n", 3);
-//		n = write(newsockfd, buffer, n);
-//		printf("sent: %s", buffer);
-//		if (n < 0) {
-//			perror("ERROR write to socket");
-//		}
-	}
+		if(wait_for_connection(sockfd, &newsockfd)) {
+			LOG_E("wait for connection failed, exiting...");
+			exit(3);
+		}
+		while(1) {
+			bzero(req, TOUCH_SRV_SOCKET_BUFF_SIZE);
+			n = read(newsockfd, req, TOUCH_SRV_SOCKET_BUFF_SIZE);
+			if (n < 0) {
+				LOG_E("ERROR read from socket");
+				running = 0;
+				break;
+			}
+			if(!n) {
+				LOG_E("read from socket returned with zero, restarting server");
+				break;
+			}
+			LOG_V("received %d bytes:\n%s\n\n", n, req);
+			n = handle_request(&touchscreen, req, n);
+			if(n) {
+				LOG_E("handle request returned with error: %d\n", n);
+				continue;
+			}
+			n = snprintf(res, sizeof(res), "ok\n");
+			n = write(newsockfd, res, n);
+			if (n < 0) {
+				LOG_E("ERROR write to socket");
+				break;
+			}
+			LOG_D("sent %d bytes: %s\n", n, res);
+		}
+		close_server(sockfd, newsockfd);
+	} while(running);
 
-	close_server(sockfd, newsockfd);
-	return 0;
-
-	file = fopen(argv[1], "r");
-	if(file == NULL) {
-		printf("no request file exist: %s\n", argv[1]);
-		exit(1);
-	}
-	while(fgets(req, sizeof(req), file) != NULL) {
-		if(!strlen(req))
-			break;
-		handle_request(&touchscreen, req);
-	};
-	fclose(file);
 	return 0;
 }
 
