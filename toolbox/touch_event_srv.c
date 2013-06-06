@@ -30,11 +30,23 @@
 #define TOUCHSCREEN_RESOLUTION_Y (480)
 #define TOUCHSCREEN_RESOLUTION_PRESSURE (1)
 
+#define GPIO_KEYS_NAME "gpio-keys"
+
 #define LOG(...) do { fprintf(stderr, __VA_ARGS__); } while(0)
 #define LOG_V(string, ...)
 #define LOG_D LOG
 #define LOG_I LOG
 #define LOG_E LOG
+
+struct dummy_dev {
+	char* dev_name;
+	int fd;
+};
+
+struct gpiokeys_device {
+	char* dev_name;
+	int fd;
+};
 
 struct touchscreen_device_events_prop {
 	uint16_t key_desc;
@@ -710,7 +722,7 @@ static int getevent(int argc, char *argv[])
     return 0;
 }
 
-static int touchscreen_get_events_prop(struct touchscreen_device* pdev)
+static int touchscreen_get_events_prop(struct touchscreen_device* touch_dev)
 {
     uint8_t *bits = NULL;
     ssize_t bits_size = 0;
@@ -723,7 +735,7 @@ static int touchscreen_get_events_prop(struct touchscreen_device* pdev)
     for(i = EV_KEY; i <= EV_MAX; i++) { // skip EV_SYN since we cannot query its available codes
 	int count = 0;
 	while(1) {
-		res = ioctl(pdev->fd, EVIOCGBIT(i, bits_size), bits);
+		res = ioctl(touch_dev->fd, EVIOCGBIT(i, bits_size), bits);
 		if(res < bits_size)
 			break;
 		bits_size = res + 16;
@@ -737,23 +749,23 @@ static int touchscreen_get_events_prop(struct touchscreen_device* pdev)
 		for(k = 0; k < 8; k++)
 		if(bits[j] & 1 << k) {
 			if(i == EV_KEY) {
-				pdev->prop.key_desc = j * 8 + k;
+				touch_dev->prop.key_desc = j * 8 + k;
 			}
 			if(i == EV_ABS) {
 			        struct input_absinfo abs;
-			        if(ioctl(pdev->fd, EVIOCGABS(j * 8 + k), &abs) != 0) {
+			        if(ioctl(touch_dev->fd, EVIOCGABS(j * 8 + k), &abs) != 0) {
 					fprintf(stderr, "failed to get absinfo\n");
 					return 2;
 				}
 				switch(j * 8 + k) {
 				case ABS_X:
-					memcpy(&pdev->prop.abs_x, &abs, sizeof(struct input_absinfo));
+					memcpy(&touch_dev->prop.abs_x, &abs, sizeof(struct input_absinfo));
 					break;
 				case ABS_Y:
-					memcpy(&pdev->prop.abs_y, &abs, sizeof(struct input_absinfo));
+					memcpy(&touch_dev->prop.abs_y, &abs, sizeof(struct input_absinfo));
 					break;
 				case ABS_PRESSURE:
-					memcpy(&pdev->prop.abs_pressure, &abs, sizeof(struct input_absinfo));
+					memcpy(&touch_dev->prop.abs_pressure, &abs, sizeof(struct input_absinfo));
 					break;
 				default:
 					fprintf(stderr, "unknown case!\n");
@@ -770,7 +782,7 @@ static int touchscreen_get_events_prop(struct touchscreen_device* pdev)
     return 0;
 }
 
-static int find_input_device(struct touchscreen_device* pdev)
+static int find_input_device(struct touchscreen_device* touch_dev, struct gpiokeys_device* gpio_dev)
 {
 	int c;
 	int i;
@@ -789,8 +801,9 @@ static int find_input_device(struct touchscreen_device* pdev)
 	int64_t last_sync_time = 0;
 	const char *device = NULL;
 	const char *device_path = "/dev/input";
+	int ret = 2;
 
-	if(!pdev) {
+	if(!touch_dev || !gpio_dev) {
 		fprintf(stderr, "%s :: null argument\n", __FUNCTION__);
 		return -1;
 	}
@@ -802,15 +815,15 @@ static int find_input_device(struct touchscreen_device* pdev)
 	print_device = 1;
 
 	res = inotify_add_watch(ufds[0].fd, device_path, IN_DELETE | IN_CREATE);
-        if(res < 0) {
-            fprintf(stderr, "could not add watch for %s, %s\n", device_path, strerror(errno));
-            return 1;
-        }
-        res = scan_dir(device_path, print_flags);
-        if(res < 0) {
-            fprintf(stderr, "scan dir failed for %s\n", device_path);
-            return 2;
-        }
+	if(res < 0) {
+		fprintf(stderr, "could not add watch for %s, %s\n", device_path, strerror(errno));
+		return 1;
+	}
+	res = scan_dir(device_path, print_flags);
+	if(res < 0) {
+		fprintf(stderr, "scan dir failed for %s\n", device_path);
+		return 2;
+	}
 
 	printf( "device scan results:\n");
 	for(i = 1; i < nfds; i++) {
@@ -821,77 +834,86 @@ static int find_input_device(struct touchscreen_device* pdev)
 		ioctl(fd, EVIOCGNAME(sizeof(name) - 1), &name);
 
 		printf("dev name #%d: %s\n", i, device_names[i]);
+		if(strstr(name, GPIO_KEYS_NAME)) {
+			//gpiokeys_device // dev_name // fd
+			gpio_dev->fd = fd;
+			gpio_dev->dev_name = device_names[i];
+			printf("device %s found: %s\n", name, touch_dev->dev_name);
+			ret--;
+			continue;
+		}
 		if(strstr(name, TOUCHSCREEN_DEV_NAME)) {
-			pdev->fd = fd;
-			pdev->dev_name = device_names[i];
-			printf("device %s found: %s\n", name, pdev->dev_name);
+			touch_dev->fd = fd;
+			touch_dev->dev_name = device_names[i];
+			printf("device %s found: %s\n", name, touch_dev->dev_name);
 
-			pdev->location[sizeof(pdev->location) - 1] = '\0';
-			ioctl(fd, EVIOCGPHYS(sizeof(pdev->location) - 1), &pdev->location);
-			pdev->idstr[sizeof(pdev->idstr) - 1] = '\0';
-			ioctl(fd, EVIOCGUNIQ(sizeof(pdev->idstr) - 1), &pdev->idstr);
-			ioctl(fd, EVIOCGVERSION, &pdev->version);
-			ioctl(fd, EVIOCGID, &pdev->id);
+			touch_dev->location[sizeof(touch_dev->location) - 1] = '\0';
+			ioctl(fd, EVIOCGPHYS(sizeof(touch_dev->location) - 1), &touch_dev->location);
+			touch_dev->idstr[sizeof(touch_dev->idstr) - 1] = '\0';
+			ioctl(fd, EVIOCGUNIQ(sizeof(touch_dev->idstr) - 1), &touch_dev->idstr);
+			ioctl(fd, EVIOCGVERSION, &touch_dev->version);
+			ioctl(fd, EVIOCGID, &touch_dev->id);
 
-			if(touchscreen_get_events_prop(pdev))
+			if(touchscreen_get_events_prop(touch_dev))
 			{
 				fprintf(stderr, "could not get touchscreen props\n");
 				return 1;
 			}
 
-			if(!pdev->prop.abs_x.resolution)
-				pdev->prop.abs_x.resolution = TOUCHSCREEN_RESOLUTION_X;
-			if(!pdev->prop.abs_y.resolution)
-				pdev->prop.abs_y.resolution = TOUCHSCREEN_RESOLUTION_Y;
+			if(!touch_dev->prop.abs_x.resolution)
+				touch_dev->prop.abs_x.resolution = TOUCHSCREEN_RESOLUTION_X;
+			if(!touch_dev->prop.abs_y.resolution)
+				touch_dev->prop.abs_y.resolution = TOUCHSCREEN_RESOLUTION_Y;
 
-			printf("touchscreen key value: %04x\n", pdev->prop.key_desc);
+			printf("touchscreen key value: %04x\n", touch_dev->prop.key_desc);
 			printf("touchscreen abs_x prop: value %d, min %d, max %d, fuzz %d, flat %d, resolution %d\n",
-				pdev->prop.abs_x.value,
-				pdev->prop.abs_x.minimum,
-				pdev->prop.abs_x.maximum,
-				pdev->prop.abs_x.fuzz,
-				pdev->prop.abs_x.flat,
-				pdev->prop.abs_x.resolution);
+				touch_dev->prop.abs_x.value,
+				touch_dev->prop.abs_x.minimum,
+				touch_dev->prop.abs_x.maximum,
+				touch_dev->prop.abs_x.fuzz,
+				touch_dev->prop.abs_x.flat,
+				touch_dev->prop.abs_x.resolution);
 			printf("touchscreen abs_y prop: value %d, min %d, max %d, fuzz %d, flat %d, resolution %d\n",
-				pdev->prop.abs_y.value,
-				pdev->prop.abs_y.minimum,
-				pdev->prop.abs_y.maximum,
-				pdev->prop.abs_y.fuzz,
-				pdev->prop.abs_y.flat,
-				pdev->prop.abs_y.resolution);
+				touch_dev->prop.abs_y.value,
+				touch_dev->prop.abs_y.minimum,
+				touch_dev->prop.abs_y.maximum,
+				touch_dev->prop.abs_y.fuzz,
+				touch_dev->prop.abs_y.flat,
+				touch_dev->prop.abs_y.resolution);
 			printf("touchscreen abs_pressure prop: value %d, min %d, max %d, fuzz %d, flat %d, resolution %d\n",
-				pdev->prop.abs_pressure.value,
-				pdev->prop.abs_pressure.minimum,
-				pdev->prop.abs_pressure.maximum,
-				pdev->prop.abs_pressure.fuzz,
-				pdev->prop.abs_pressure.flat,
-				pdev->prop.abs_pressure.resolution);
+				touch_dev->prop.abs_pressure.value,
+				touch_dev->prop.abs_pressure.minimum,
+				touch_dev->prop.abs_pressure.maximum,
+				touch_dev->prop.abs_pressure.fuzz,
+				touch_dev->prop.abs_pressure.flat,
+				touch_dev->prop.abs_pressure.resolution);
 
 			print_flags |= PRINT_ALL_INFO;
 			printf("  bus:      %04x\n"
 			       "  vendor    %04x\n"
 			       "  product   %04x\n"
 			       "  version   %04x\n",
-				pdev->id.bustype, pdev->id.vendor,
-				pdev->id.product, pdev->id.version);
+				touch_dev->id.bustype, touch_dev->id.vendor,
+				touch_dev->id.product, touch_dev->id.version);
 
 			printf("  name:     \"%s\"\n", name);
 			printf("  location: \"%s\"\n"
-			       "  id:       \"%s\"\n", pdev->location, pdev->idstr);
+			       "  id:       \"%s\"\n", touch_dev->location, touch_dev->idstr);
 			printf("  version:  %d.%d.%d\n",
-					pdev->version >> 16, (pdev->version >> 8) & 0xff, pdev->version & 0xff);
+					touch_dev->version >> 16, (touch_dev->version >> 8) & 0xff, touch_dev->version & 0xff);
 			print_possible_events(fd, print_flags);
 			print_input_props(fd);
-			print_hid_descriptor(pdev->id.bustype,
-					     pdev->id.vendor,
-					     pdev->id.product);
-			return 0;
+			print_hid_descriptor(touch_dev->id.bustype,
+					     touch_dev->id.vendor,
+					     touch_dev->id.product);
+			ret--;
+			continue;
 		}
 	}
-	return 1; // error if not found
+	return ret; // non zero if not found
 }
 
-static int sendevent(struct touchscreen_device* pdev, struct input_event* events, int count)
+static int sendevent(struct dummy_dev* pdev, struct input_event* events, int count)
 {
 	int i;
 	int fd = pdev->fd;
@@ -899,15 +921,15 @@ static int sendevent(struct touchscreen_device* pdev, struct input_event* events
 
 //	fd = open(pdev->dev_name, O_RDWR);
 	if(fd < 0) {
-		fprintf(stderr, "could not open %s, %s\n",
+		fprintf(stderr, "could not use %s, %s\n",
 				pdev->dev_name, strerror(errno));
 		return 1;
 	}
-	if (ioctl(fd, EVIOCGVERSION, &version)) {
-		fprintf(stderr, "could not get driver version for %s, %s\n",
-				pdev->dev_name, strerror(errno));
-		return 1;
-	}
+//	if (ioctl(fd, EVIOCGVERSION, &version)) {
+//		fprintf(stderr, "could not get driver version for %s, %s\n",
+//				pdev->dev_name, strerror(errno));
+//		return 1;
+//	}
 	for(i = 0; i < count; i++) {
 		struct input_event* event = &events[i];
 		int ret = write(fd, event, sizeof(struct input_event));
@@ -932,17 +954,17 @@ static uint32_t convert_touch_value(float val, struct input_absinfo info, uint16
 	return ret;
 }
 
-static void adjust_resolution_factor(struct touchscreen_device* pdev)
+static void adjust_resolution_factor(struct touchscreen_device* touch_dev)
 {
-	resolution_factor_x = ((float)((float)pdev->prop.abs_x.resolution / (float)client_pad_width));
-	resolution_factor_y = ((float)((float)pdev->prop.abs_y.resolution / (float)client_pad_height));
+	resolution_factor_x = ((float)((float)touch_dev->prop.abs_x.resolution / (float)client_pad_width));
+	resolution_factor_y = ((float)((float)touch_dev->prop.abs_y.resolution / (float)client_pad_height));
 	LOG_V("resolution factor calculated: %f, %f (from %d/%d, %d/%d)\n",
 			resolution_factor_x, resolution_factor_y,
-			pdev->prop.abs_x.resolution, client_pad_width,
-			pdev->prop.abs_y.resolution, client_pad_height);
+			touch_dev->prop.abs_x.resolution, client_pad_width,
+			touch_dev->prop.abs_y.resolution, client_pad_height);
 }
 
-static int handle_request(struct touchscreen_device* pdev, const char* req, int req_len)
+static int handle_request(struct touchscreen_device* touch_dev, struct gpiokeys_device* gpio_dev, const char* req, int req_len)
 {
 	struct input_event events[10];
 	float x, y, pressure;
@@ -972,7 +994,7 @@ static int handle_request(struct touchscreen_device* pdev, const char* req, int 
 			LOG_E("args error (empty request)\n");
 			return 0;
 		}
-		if(len <= 2) {
+		if(len < 1) {
 			LOG_E("args error, len: %d\n", len);
 			return 3;
 		}
@@ -980,7 +1002,7 @@ static int handle_request(struct touchscreen_device* pdev, const char* req, int 
 		{
 		case 'd':
 			sscanf(p+2, "%d %d", &client_pad_height, &client_pad_width);
-			adjust_resolution_factor(pdev);
+			adjust_resolution_factor(touch_dev);
 			LOG_D("Dimensions received, height: %d, width: %d\n", client_pad_height, client_pad_width);
 			break;
 		case 'D':
@@ -992,18 +1014,18 @@ static int handle_request(struct touchscreen_device* pdev, const char* req, int 
 			events[0].value = 1; // DOWN
 			events[1].type = EV_ABS;
 			events[1].code = ABS_X;
-			events[1].value = convert_touch_value(x, pdev->prop.abs_x, pdev->prop.abs_x.resolution, resolution_factor_x);//TOUCHSCREEN_RESOLUTION_X
+			events[1].value = convert_touch_value(x, touch_dev->prop.abs_x, touch_dev->prop.abs_x.resolution, resolution_factor_x);//TOUCHSCREEN_RESOLUTION_X
 			events[2].type = EV_ABS;
 			events[2].code = ABS_Y;
-			events[2].value = convert_touch_value(y, pdev->prop.abs_y, pdev->prop.abs_y.resolution, resolution_factor_y);//TOUCHSCREEN_RESOLUTION_Y
+			events[2].value = convert_touch_value(y, touch_dev->prop.abs_y, touch_dev->prop.abs_y.resolution, resolution_factor_y);//TOUCHSCREEN_RESOLUTION_Y
 			events[3].type = EV_ABS;
 			events[3].code = ABS_PRESSURE;
-			events[3].value = convert_touch_value(pressure, pdev->prop.abs_pressure, TOUCHSCREEN_RESOLUTION_PRESSURE, 1);
+			events[3].value = convert_touch_value(pressure, touch_dev->prop.abs_pressure, TOUCHSCREEN_RESOLUTION_PRESSURE, 1);
 			events[4].type = EV_SYN;
 			events[4].code = SYN_REPORT;
 			events[4].value = 0;
 			count = 5;
-			ret = sendevent(pdev, events, count);
+			ret = sendevent((struct dummy_dev*)touch_dev, events, count);
 			break;
 		case 'M':
 			sscanf(p+2, "%f %f %f", &x, &y, &pressure);
@@ -1011,18 +1033,18 @@ static int handle_request(struct touchscreen_device* pdev, const char* req, int 
 
 			events[0].type = EV_ABS;
 			events[0].code = ABS_X;
-			events[0].value = convert_touch_value(x, pdev->prop.abs_x, pdev->prop.abs_x.resolution, resolution_factor_x);//TOUCHSCREEN_RESOLUTION_X
+			events[0].value = convert_touch_value(x, touch_dev->prop.abs_x, touch_dev->prop.abs_x.resolution, resolution_factor_x);//TOUCHSCREEN_RESOLUTION_X
 			events[1].type = EV_ABS;
 			events[1].code = ABS_Y;
-			events[1].value = convert_touch_value(y, pdev->prop.abs_y, pdev->prop.abs_y.resolution, resolution_factor_y);//TOUCHSCREEN_RESOLUTION_Y
+			events[1].value = convert_touch_value(y, touch_dev->prop.abs_y, touch_dev->prop.abs_y.resolution, resolution_factor_y);//TOUCHSCREEN_RESOLUTION_Y
 			events[2].type = EV_ABS;
 			events[2].code = ABS_PRESSURE;
-			events[2].value = convert_touch_value(pressure, pdev->prop.abs_pressure, TOUCHSCREEN_RESOLUTION_PRESSURE, 1);
+			events[2].value = convert_touch_value(pressure, touch_dev->prop.abs_pressure, TOUCHSCREEN_RESOLUTION_PRESSURE, 1);
 			events[3].type = EV_SYN;
 			events[3].code = SYN_REPORT;
 			events[3].value = 0;
 			count = 4;
-			ret = sendevent(pdev, events, count);
+			ret = sendevent((struct dummy_dev*)touch_dev, events, count);
 			break;
 		case 'U':
 			sscanf(p+2, "%f %f %f", &x, &y, &pressure);
@@ -1033,12 +1055,26 @@ static int handle_request(struct touchscreen_device* pdev, const char* req, int 
 			events[0].value = 0; // UP
 			events[1].type = EV_ABS;
 			events[1].code = ABS_PRESSURE;
-			events[1].value = convert_touch_value(pressure, pdev->prop.abs_pressure, TOUCHSCREEN_RESOLUTION_PRESSURE, 1);
+			events[1].value = convert_touch_value(pressure, touch_dev->prop.abs_pressure, TOUCHSCREEN_RESOLUTION_PRESSURE, 1);
 			events[2].type = EV_SYN;
 			events[2].code = SYN_REPORT;
 			events[2].value = 0;
 			count = 3;
-			ret = sendevent(pdev, events, count);
+			ret = sendevent((struct dummy_dev*)touch_dev, events, count);
+			break;
+		case 'B':
+			LOG_D("BACK\n");
+
+			events[0].type = EV_KEY;
+			events[0].code = KEY_BACK;
+			events[0].value = 1; // DOWN
+			events[1].type = EV_SYN;
+			events[1].code = SYN_REPORT;
+			events[1].value = 0;
+			count = 2;
+			ret = sendevent((struct dummy_dev*)gpio_dev, events, count);
+			events[0].value = 0; // UP
+			ret |= sendevent((struct dummy_dev*)gpio_dev, events, count);
 			break;
 		default:
 			LOG_E("args error\n");
@@ -1136,6 +1172,7 @@ int touch_event_srv_main(int argc, char *argv[])
 	char req[TOUCH_SRV_SOCKET_BUFF_SIZE];
 	char res[TOUCH_SRV_SOCKET_BUFF_SIZE];
 	struct touchscreen_device touchscreen;
+	struct gpiokeys_device gpio;
 	int sockfd, newsockfd;
 	int i, n;
 
@@ -1143,7 +1180,7 @@ int touch_event_srv_main(int argc, char *argv[])
 
 	running = 1;
 
-	if(find_input_device(&touchscreen)) {
+	if(find_input_device(&touchscreen, &gpio)) {
 		LOG_E("could not find %s device, exiting...\n",
 				TOUCHSCREEN_DEV_NAME);
 		exit(1);
@@ -1173,7 +1210,7 @@ int touch_event_srv_main(int argc, char *argv[])
 				break;
 			}
 			LOG_V("received %d bytes:\n%s\n\n", n, req);
-			n = handle_request(&touchscreen, req, n);
+			n = handle_request(&touchscreen, &gpio, req, n);
 			if(n) {
 				LOG_E("handle request returned with error: %d\n", n);
 				continue;
