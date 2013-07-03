@@ -8,6 +8,7 @@
 #include <sys/inotify.h>
 #include <sys/limits.h>
 #include <sys/poll.h>
+#include <sys/stat.h>
 #include <linux/input.h>
 #include <unistd.h>
 #include <sys/types.h> 
@@ -20,6 +21,12 @@
 #ifdef HAVE_SELINUX
 #include <selinux/selinux.h>
 #endif
+
+#define EXIT_CODE_OKAY			0
+#define EXIT_CODE_DAEMONIZE		1
+#define EXIT_CODE_NO_INPUT_DEVICE	2
+#define EXIT_CODE_SOCKET_ERROR		3
+#define EXIT_CODE_CONNECTION_FAILURE	4
 
 #define TOUCH_SRV_PORTNO	2301
 #define TOUCH_SRV_MAX_BACKLOG_CONNECTIONS 5
@@ -1165,7 +1172,40 @@ static int close_server(int sockfd, int newsockfd)
 	return 0;
 }
 
-int running;
+int daemonize_process()
+{
+	pid_t process_id = 0;
+	pid_t sid = 0;
+	// Create child process
+	process_id = fork();
+	// Indication of fork() failure
+	if (process_id < 0)
+	{
+		printf("fork failed!\n");
+		// Return failure in exit status
+		return 1;
+	}
+	// PARENT PROCESS. Need to kill it.
+	if (process_id > 0)
+	{
+		printf("process_id of child process %d \n", process_id);
+		// return success in exit status
+		exit(EXIT_CODE_OKAY);
+	}
+	//unmask the file mode
+	umask(0);
+	//set new session
+	sid = setsid();
+	if(sid < 0)
+	{
+		// Return failure
+		return 2;
+	}
+	return 0;
+}
+
+int running = 0;
+int daemonize = 0;
 
 int touch_event_srv_main(int argc, char *argv[])
 {
@@ -1178,12 +1218,17 @@ int touch_event_srv_main(int argc, char *argv[])
 
 	FILE* file;
 
+	if(daemonize && daemonize_process() != 0 ) {
+		printf("unable to daemonize process, exiting");
+		exit(EXIT_CODE_DAEMONIZE);
+	}
+
 	running = 1;
 
 	if(find_input_device(&touchscreen, &gpio)) {
 		LOG_E("could not find %s device, exiting...\n",
 				TOUCHSCREEN_DEV_NAME);
-		exit(1);
+		exit(EXIT_CODE_NO_INPUT_DEVICE);
 	}
 	adjust_resolution_factor(&touchscreen);
 
@@ -1191,11 +1236,11 @@ int touch_event_srv_main(int argc, char *argv[])
 		if(start_server(&sockfd, TOUCH_SRV_PORTNO)) {
 			LOG_E("could not start server on port %d, exiting...\n",
 					TOUCH_SRV_PORTNO);
-			exit(2);
+			exit(EXIT_CODE_SOCKET_ERROR);
 		}
 		if(wait_for_connection(sockfd, &newsockfd)) {
 			LOG_E("wait for connection failed, exiting...\n");
-			exit(3);
+			exit(EXIT_CODE_CONNECTION_FAILURE);
 		}
 		while(1) {
 			bzero(req, TOUCH_SRV_SOCKET_BUFF_SIZE);
@@ -1226,7 +1271,7 @@ int touch_event_srv_main(int argc, char *argv[])
 		close_server(sockfd, newsockfd);
 	} while(running);
 
-	return 0;
+	return EXIT_CODE_OKAY;
 }
 
 
