@@ -38,6 +38,9 @@
 #define TOUCHSCREEN_RESOLUTION_PRESSURE (1)
 
 #define GPIO_KEYS_NAME "gpio-keys"
+#define MOUSE_DEV_NAME "Android Virtual Mouse"
+
+#define MOUSE_DEV_PATH "/dev/avms"
 
 #define LOG(...) do { fprintf(stderr, __VA_ARGS__); } while(0)
 #define LOG_V(string, ...)
@@ -51,6 +54,11 @@ struct dummy_dev {
 };
 
 struct gpiokeys_device {
+	char* dev_name;
+	int fd;
+};
+
+struct mouse_device {
 	char* dev_name;
 	int fd;
 };
@@ -74,6 +82,13 @@ struct touchscreen_device {
 	struct touchscreen_device_events_prop prop;
 };
 
+struct system_devices {
+	struct touchscreen_device* touch_dev;
+	struct gpiokeys_device* gpio_dev;
+	struct mouse_device* mouse_dev;
+};
+
+
 enum {
     PRINT_DEVICE_ERRORS     = 1U << 0,
     PRINT_DEVICE            = 1U << 1,
@@ -95,6 +110,16 @@ static struct pollfd *ufds;
 static char **device_names;
 static int nfds;
 const char* input_device;
+
+static float resolution_factor_x = 1;
+static float resolution_factor_y = 1;
+
+int running = 0;
+int daemonize = 0;
+
+socklen_t clilen;
+struct sockaddr_in serv_addr;
+struct sockaddr_in cli_addr;
 
 static const char *get_label(const struct label *labels, int value)
 {
@@ -789,8 +814,12 @@ static int touchscreen_get_events_prop(struct touchscreen_device* touch_dev)
     return 0;
 }
 
-static int find_input_device(struct touchscreen_device* touch_dev, struct gpiokeys_device* gpio_dev)
+static int find_input_device(struct system_devices* devices)
 {
+	struct touchscreen_device* touch_dev = devices->touch_dev;
+	struct gpiokeys_device* gpio_dev = devices->gpio_dev;
+	struct mouse_device* mouse_dev = devices->mouse_dev;
+
 	int c;
 	int i;
 	int res;
@@ -808,9 +837,9 @@ static int find_input_device(struct touchscreen_device* touch_dev, struct gpioke
 	int64_t last_sync_time = 0;
 	const char *device = NULL;
 	const char *device_path = "/dev/input";
-	int ret = 2;
+	int ret = 3;
 
-	if(!touch_dev || !gpio_dev) {
+	if(!touch_dev || !gpio_dev || !mouse_dev) {
 		fprintf(stderr, "%s :: null argument\n", __FUNCTION__);
 		return -1;
 	}
@@ -841,6 +870,28 @@ static int find_input_device(struct touchscreen_device* touch_dev, struct gpioke
 		ioctl(fd, EVIOCGNAME(sizeof(name) - 1), &name);
 
 		printf("dev name #%d: %s\n", i, device_names[i]);
+		if(strstr(name, MOUSE_DEV_NAME)) {
+			struct stat st;
+			dev_t dev;
+			mouse_dev->fd = fd;
+			mouse_dev->dev_name = device_names[i];
+			printf("device %s found: %s\n", name, touch_dev->dev_name);
+			do {
+				if(stat(MOUSE_DEV_PATH, &st) != 0) {
+					dev = makedev(60, 0);
+					if(mknod(MOUSE_DEV_PATH, S_IFCHR | S_IWUSR, dev) == -1) {
+						LOG_E("%s: Could not create a mouse device file (errno=%d)\n", __FUNCTION__, errno);
+						break;
+					}
+				}
+				if((mouse_dev->fd = open(MOUSE_DEV_PATH, O_WRONLY)) == -1) {
+					LOG_E("%s: could not open mouse file (errno=%d)\n", __FUNCTION__, errno);
+					break;
+				}
+				ret--;
+			} while(0);
+			continue;
+		}
 		if(strstr(name, GPIO_KEYS_NAME)) {
 			//gpiokeys_device // dev_name // fd
 			gpio_dev->fd = fd;
@@ -926,32 +977,33 @@ static int sendevent(struct dummy_dev* pdev, struct input_event* events, int cou
 	int fd = pdev->fd;
 	int version;
 
-//	fd = open(pdev->dev_name, O_RDWR);
 	if(fd < 0) {
 		fprintf(stderr, "could not use %s, %s\n",
 				pdev->dev_name, strerror(errno));
 		return 1;
 	}
-//	if (ioctl(fd, EVIOCGVERSION, &version)) {
-//		fprintf(stderr, "could not get driver version for %s, %s\n",
-//				pdev->dev_name, strerror(errno));
-//		return 1;
-//	}
 	for(i = 0; i < count; i++) {
 		struct input_event* event = &events[i];
 		int ret = write(fd, event, sizeof(struct input_event));
 		if(ret < sizeof(struct input_event)) {
 			fprintf(stderr, "write event failed, %s\n", strerror(errno));
-//			close(fd);
 			return -1;
 		}
 	}
-//	close(fd);
 	return 0;
 }
 
-static float resolution_factor_x = 1;
-static float resolution_factor_y = 1;
+static int send_mouse_event(int fd, const unsigned char type, const int Xvalue, const int Yvalue) {
+	char write_buffer[sizeof(char)+2*sizeof(int)];
+	memcpy(write_buffer, &type, sizeof(char));
+	memcpy(write_buffer + sizeof(char), &Xvalue, sizeof(int));
+	memcpy(write_buffer + sizeof(char) + sizeof(int), &Yvalue, sizeof(int));
+	if(write(fd, write_buffer, sizeof(write_buffer)) != sizeof(write_buffer)) {
+		LOG_E("%s write() error", __FUNCTION__);
+		return -1;
+	}
+	return 0;
+}
 
 static uint32_t convert_touch_value(float val, struct input_absinfo info, uint16_t resolution, float resolution_factor)
 {
@@ -971,10 +1023,14 @@ static void adjust_resolution_factor(struct touchscreen_device* touch_dev)
 			touch_dev->prop.abs_y.resolution, client_pad_height);
 }
 
-static int handle_request(struct touchscreen_device* touch_dev, struct gpiokeys_device* gpio_dev, const char* req, int req_len)
+static int handle_request(struct system_devices* devices, const char* req, int req_len)
 {
-	struct input_event events[10];
+	struct touchscreen_device* touch_dev = devices->touch_dev;
+	struct gpiokeys_device* gpio_dev = devices->gpio_dev;
+	struct mouse_device* mouse_dev = devices->mouse_dev;
+	struct input_event events[5];
 	float x, y, pressure;
+	int mtype, mx, my;
 	int count;
 	const char* p = req;
 	int ret = 0;
@@ -1083,6 +1139,11 @@ static int handle_request(struct touchscreen_device* touch_dev, struct gpiokeys_
 			events[0].value = 0; // UP
 			ret |= sendevent((struct dummy_dev*)gpio_dev, events, count);
 			break;
+		case 'm':
+			sscanf(p+2, "%d %d %d", &mtype, &mx, &my);
+			LOG_D("mouse event, type=%c, x=%d, y=%d\n", mtype, mx, my);
+			send_mouse_event(mouse_dev->fd, (unsigned char)mtype, mx, my);
+			break;
 		default:
 			LOG_E("args error\n");
 			return 4;
@@ -1094,11 +1155,6 @@ static int handle_request(struct touchscreen_device* touch_dev, struct gpiokeys_
 	}
 	return ret;
 }
-
-
-socklen_t clilen;
-struct sockaddr_in serv_addr;
-struct sockaddr_in cli_addr;
 
 static void nonblock(int sockfd)
 {
@@ -1204,19 +1260,20 @@ int daemonize_process()
 	return 0;
 }
 
-int running = 0;
-int daemonize = 0;
-
 int touch_event_srv_main(int argc, char *argv[])
 {
 	char req[TOUCH_SRV_SOCKET_BUFF_SIZE];
 	char res[TOUCH_SRV_SOCKET_BUFF_SIZE];
 	struct touchscreen_device touchscreen;
 	struct gpiokeys_device gpio;
+	struct mouse_device mouse;
 	int sockfd, newsockfd;
 	int i, n;
+	struct system_devices devices;
 
-	FILE* file;
+	devices.touch_dev = &touchscreen;
+	devices.gpio_dev = &gpio;
+	devices.mouse_dev = &mouse;
 
 	if(daemonize && daemonize_process() != 0 ) {
 		printf("unable to daemonize process, exiting");
@@ -1225,7 +1282,7 @@ int touch_event_srv_main(int argc, char *argv[])
 
 	running = 1;
 
-	if(find_input_device(&touchscreen, &gpio)) {
+	if(find_input_device(&devices)) {
 		LOG_E("could not find %s device, exiting...\n",
 				TOUCHSCREEN_DEV_NAME);
 		exit(EXIT_CODE_NO_INPUT_DEVICE);
@@ -1255,7 +1312,7 @@ int touch_event_srv_main(int argc, char *argv[])
 				break;
 			}
 			LOG_V("received %d bytes:\n%s\n\n", n, req);
-			n = handle_request(&touchscreen, &gpio, req, n);
+			n = handle_request(&devices, req, n);
 			if(n) {
 				LOG_E("handle request returned with error: %d\n", n);
 				continue;
@@ -1269,6 +1326,9 @@ int touch_event_srv_main(int argc, char *argv[])
 			LOG_D("sent %d bytes: %s\n", n, res);
 		}
 		close_server(sockfd, newsockfd);
+		close(devices.mouse_dev->fd);
+		close(devices.gpio_dev->fd);
+		close(devices.touch_dev->fd);
 	} while(running);
 
 	return EXIT_CODE_OKAY;
