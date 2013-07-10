@@ -38,9 +38,12 @@
 #define TOUCHSCREEN_RESOLUTION_PRESSURE (1)
 
 #define GPIO_KEYS_NAME "gpio-keys"
-#define MOUSE_DEV_NAME "Android Virtual Mouse"
 
+#define MOUSE_DEV_NAME "Android Virtual Mouse"
 #define MOUSE_DEV_PATH "/dev/avms"
+
+#define KEYBOARD_DEV_NAME "Android Virtual Keyboard"
+#define KEYBOARD_DEV_PATH "/dev/avkbd"
 
 #define LOG(...) do { fprintf(stderr, __VA_ARGS__); } while(0)
 #define LOG_V(string, ...)
@@ -59,6 +62,11 @@ struct gpiokeys_device {
 };
 
 struct mouse_device {
+	char* dev_name;
+	int fd;
+};
+
+struct keyboard_device {
 	char* dev_name;
 	int fd;
 };
@@ -86,6 +94,7 @@ struct system_devices {
 	struct touchscreen_device* touch_dev;
 	struct gpiokeys_device* gpio_dev;
 	struct mouse_device* mouse_dev;
+	struct keyboard_device* keyboard_dev;
 };
 
 
@@ -819,6 +828,7 @@ static int find_input_device(struct system_devices* devices)
 	struct touchscreen_device* touch_dev = devices->touch_dev;
 	struct gpiokeys_device* gpio_dev = devices->gpio_dev;
 	struct mouse_device* mouse_dev = devices->mouse_dev;
+	struct keyboard_device* keyboard_dev = devices->keyboard_dev;
 
 	int c;
 	int i;
@@ -837,7 +847,7 @@ static int find_input_device(struct system_devices* devices)
 	int64_t last_sync_time = 0;
 	const char *device = NULL;
 	const char *device_path = "/dev/input";
-	int ret = 3;
+	int ret = 4;
 
 	if(!touch_dev || !gpio_dev || !mouse_dev) {
 		fprintf(stderr, "%s :: null argument\n", __FUNCTION__);
@@ -875,7 +885,7 @@ static int find_input_device(struct system_devices* devices)
 			dev_t dev;
 			mouse_dev->fd = fd;
 			mouse_dev->dev_name = device_names[i];
-			printf("device %s found: %s\n", name, touch_dev->dev_name);
+			printf("device %s found: %s\n", name, mouse_dev->dev_name);
 			do {
 				if(stat(MOUSE_DEV_PATH, &st) != 0) {
 					dev = makedev(60, 0);
@@ -886,6 +896,28 @@ static int find_input_device(struct system_devices* devices)
 				}
 				if((mouse_dev->fd = open(MOUSE_DEV_PATH, O_WRONLY)) == -1) {
 					LOG_E("%s: could not open mouse file (errno=%d)\n", __FUNCTION__, errno);
+					break;
+				}
+				ret--;
+			} while(0);
+			continue;
+		}
+		if(strstr(name, KEYBOARD_DEV_NAME)) {
+			struct stat st;
+			dev_t dev;
+			keyboard_dev->fd = fd;
+			keyboard_dev->dev_name = device_names[i];
+			printf("device %s found: %s\n", name, keyboard_dev->dev_name);
+			do {
+				if(stat(KEYBOARD_DEV_PATH, &st) != 0) {
+					dev = makedev(61, 0);
+					if(mknod(KEYBOARD_DEV_PATH, S_IFCHR | S_IWUSR, dev) == -1) {
+						LOG_E("%s: Could not create a keyboard device file (errno=%d)\n", __FUNCTION__, errno);
+						break;
+					}
+				}
+				if((keyboard_dev->fd = open(KEYBOARD_DEV_PATH, O_WRONLY)) == -1) {
+					LOG_E("%s: could not open keyboard file (errno=%d)\n", __FUNCTION__, errno);
 					break;
 				}
 				ret--;
@@ -1005,6 +1037,17 @@ static int send_mouse_event(int fd, const unsigned char type, const int Xvalue, 
 	return 0;
 }
 
+static int send_keyboard_event(int fd, const unsigned char key, const unsigned char value) {
+	unsigned char write_buffer[2];
+	write_buffer[0] = key;
+	write_buffer[1] = value;
+	if(write(fd, write_buffer, sizeof(write_buffer)) != sizeof(write_buffer)) {
+		LOG_E("%s write() error", __FUNCTION__);
+		return -1;
+	}
+	return 0;
+}
+
 static uint32_t convert_touch_value(float val, struct input_absinfo info, uint16_t resolution, float resolution_factor)
 {
 	uint32_t ret = val * (info.maximum-info.minimum+1) * resolution_factor / resolution + info.minimum;
@@ -1028,9 +1071,11 @@ static int handle_request(struct system_devices* devices, const char* req, int r
 	struct touchscreen_device* touch_dev = devices->touch_dev;
 	struct gpiokeys_device* gpio_dev = devices->gpio_dev;
 	struct mouse_device* mouse_dev = devices->mouse_dev;
+	struct keyboard_device* keyboard_dev = devices->keyboard_dev;
 	struct input_event events[5];
 	float x, y, pressure;
 	int mtype, mx, my;
+	int kkey, kvalue;
 	int count;
 	const char* p = req;
 	int ret = 0;
@@ -1139,9 +1184,35 @@ static int handle_request(struct system_devices* devices, const char* req, int r
 			events[0].value = 0; // UP
 			ret |= sendevent((struct dummy_dev*)gpio_dev, events, count);
 			break;
+		case 'H':
+			LOG_D("HOME\n");
+
+			events[0].type = EV_KEY;
+			events[0].code = KEY_BACK;
+			events[0].value = 1; // DOWN
+			events[1].type = EV_SYN;
+			events[1].code = SYN_REPORT;
+			events[1].value = 0;
+			count = 2;
+			ret = sendevent((struct dummy_dev*)gpio_dev, events, count);
+			events[0].value = 0; // UP
+			ret |= sendevent((struct dummy_dev*)gpio_dev, events, count);
+
+//			send_keyboard_event(keyboard_dev->fd, KEY_HOMEPAGE, 1);
+//			send_keyboard_event(keyboard_dev->fd, KEY_HOMEPAGE, 0);
+			break;
+		case 'k':
+			LOG_D("KEYBOARD event\n");
+
+			sscanf(p+2, "%d %d", &kkey, &kvalue);
+			LOG_D("keyboard event, key=%d, value=%d\n", kkey, kvalue);
+			send_keyboard_event(keyboard_dev->fd, kkey, kvalue);
+			break;
 		case 'm':
+			LOG_D("MOUSE event\n");
+
 			sscanf(p+2, "%d %d %d", &mtype, &mx, &my);
-			LOG_D("mouse event, type=%c, x=%d, y=%d\n", mtype, mx, my);
+			LOG_D("mouse event, type=%d, x=%d, y=%d\n", mtype, mx, my);
 			send_mouse_event(mouse_dev->fd, (unsigned char)mtype, mx, my);
 			break;
 		default:
@@ -1267,6 +1338,7 @@ int touch_event_srv_main(int argc, char *argv[])
 	struct touchscreen_device touchscreen;
 	struct gpiokeys_device gpio;
 	struct mouse_device mouse;
+	struct keyboard_device keyboard;
 	int sockfd, newsockfd;
 	int i, n;
 	struct system_devices devices;
@@ -1274,6 +1346,7 @@ int touch_event_srv_main(int argc, char *argv[])
 	devices.touch_dev = &touchscreen;
 	devices.gpio_dev = &gpio;
 	devices.mouse_dev = &mouse;
+	devices.keyboard_dev = &keyboard;
 
 	if(daemonize && daemonize_process() != 0 ) {
 		printf("unable to daemonize process, exiting");
