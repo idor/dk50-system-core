@@ -1187,19 +1187,8 @@ static int handle_request(struct system_devices* devices, const char* req, int r
 		case 'H':
 			LOG_D("HOME\n");
 
-			events[0].type = EV_KEY;
-			events[0].code = KEY_BACK;
-			events[0].value = 1; // DOWN
-			events[1].type = EV_SYN;
-			events[1].code = SYN_REPORT;
-			events[1].value = 0;
-			count = 2;
-			ret = sendevent((struct dummy_dev*)gpio_dev, events, count);
-			events[0].value = 0; // UP
-			ret |= sendevent((struct dummy_dev*)gpio_dev, events, count);
-
-//			send_keyboard_event(keyboard_dev->fd, KEY_HOMEPAGE, 1);
-//			send_keyboard_event(keyboard_dev->fd, KEY_HOMEPAGE, 0);
+			send_keyboard_event(keyboard_dev->fd, KEY_HOMEPAGE, 1);
+			send_keyboard_event(keyboard_dev->fd, KEY_HOMEPAGE, 0);
 			break;
 		case 'k':
 			LOG_D("KEYBOARD event\n");
