@@ -1042,7 +1042,7 @@ static int send_keyboard_event(int fd, const unsigned char key, const unsigned c
 	write_buffer[0] = key;
 	write_buffer[1] = value;
 	if(write(fd, write_buffer, sizeof(write_buffer)) != sizeof(write_buffer)) {
-		LOG_E("%s write() error", __FUNCTION__);
+		LOG_E("%s write() error\n", __FUNCTION__);
 		return -1;
 	}
 	return 0;
@@ -1187,8 +1187,8 @@ static int handle_request(struct system_devices* devices, const char* req, int r
 		case 'H':
 			LOG_D("HOME\n");
 
-			send_keyboard_event(keyboard_dev->fd, KEY_HOMEPAGE, 1);
-			send_keyboard_event(keyboard_dev->fd, KEY_HOMEPAGE, 0);
+			send_keyboard_event(keyboard_dev->fd, 99, 1);
+			send_keyboard_event(keyboard_dev->fd, 99, 0);
 			break;
 		case 'k':
 			LOG_D("KEYBOARD event\n");
@@ -1388,9 +1388,12 @@ int touch_event_srv_main(int argc, char *argv[])
 			LOG_D("sent %d bytes: %s\n", n, res);
 		}
 		close_server(sockfd, newsockfd);
+/*
 		close(devices.mouse_dev->fd);
 		close(devices.gpio_dev->fd);
 		close(devices.touch_dev->fd);
+		close(devices.keyboard_dev->fd);
+*/
 	} while(running);
 
 	return EXIT_CODE_OKAY;
