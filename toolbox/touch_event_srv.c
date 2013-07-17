@@ -1331,6 +1331,7 @@ int touch_event_srv_main(int argc, char *argv[])
 	int sockfd, newsockfd;
 	int i, n;
 	struct system_devices devices;
+	int ret = EXIT_CODE_OKAY;
 
 	devices.touch_dev = &touchscreen;
 	devices.gpio_dev = &gpio;
@@ -1355,17 +1356,19 @@ int touch_event_srv_main(int argc, char *argv[])
 		if(start_server(&sockfd, TOUCH_SRV_PORTNO)) {
 			LOG_E("could not start server on port %d, exiting...\n",
 					TOUCH_SRV_PORTNO);
-			exit(EXIT_CODE_SOCKET_ERROR);
+			ret = EXIT_CODE_SOCKET_ERROR;
+			break;
 		}
 		if(wait_for_connection(sockfd, &newsockfd)) {
 			LOG_E("wait for connection failed, exiting...\n");
-			exit(EXIT_CODE_CONNECTION_FAILURE);
+			ret = EXIT_CODE_CONNECTION_FAILURE;
+			break;
 		}
 		while(1) {
 			bzero(req, TOUCH_SRV_SOCKET_BUFF_SIZE);
 			n = read(newsockfd, req, TOUCH_SRV_SOCKET_BUFF_SIZE);
 			if (n < 0) {
-				LOG_E("ERROR read from socket\n");
+				LOG_E("ERROR read from socket, restarting server\n");
 				running = 0;
 				break;
 			}
@@ -1376,27 +1379,26 @@ int touch_event_srv_main(int argc, char *argv[])
 			LOG_V("received %d bytes:\n%s\n\n", n, req);
 			n = handle_request(&devices, req, n);
 			if(n) {
-				LOG_E("handle request returned with error: %d\n", n);
+				LOG_E("handle request returned with error: %d, request ignored\n", n);
 				continue;
 			}
 			n = snprintf(res, sizeof(res), "ok\n");
 			n = write(newsockfd, res, n);
 			if (n < 0) {
-				LOG_E("ERROR write to socket\n");
+				LOG_E("ERROR write to socket, restarting server\n");
 				break;
 			}
 			LOG_D("sent %d bytes: %s\n", n, res);
 		}
 		close_server(sockfd, newsockfd);
-/*
-		close(devices.mouse_dev->fd);
-		close(devices.gpio_dev->fd);
-		close(devices.touch_dev->fd);
-		close(devices.keyboard_dev->fd);
-*/
 	} while(running);
 
-	return EXIT_CODE_OKAY;
+	close(devices.mouse_dev->fd);
+	close(devices.gpio_dev->fd);
+	close(devices.touch_dev->fd);
+	close(devices.keyboard_dev->fd);
+
+	return ret;
 }
 
 
