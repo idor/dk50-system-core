@@ -22,7 +22,7 @@
 #include <selinux/selinux.h>
 #endif
 
-#define CMD_REPLY_ANYWAY		1
+#define CMD_REPLY_ANYWAY		0
 
 #define EXIT_CODE_OKAY			0
 #define EXIT_CODE_DAEMONIZE		1
@@ -1020,7 +1020,7 @@ static int sendevent(struct dummy_dev* pdev, struct input_event* events, int cou
 	for(i = 0; i < count; i++) {
 		struct input_event* event = &events[i];
 		int ret = write(fd, event, sizeof(struct input_event));
-		if(ret < sizeof(struct input_event)) {
+		if(ret < (int) sizeof(struct input_event)) {
 			fprintf(stderr, "write event failed, %s\n", strerror(errno));
 			return -1;
 		}
