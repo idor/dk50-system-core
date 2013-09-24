@@ -22,6 +22,8 @@
 #include <selinux/selinux.h>
 #endif
 
+#define CMD_REPLY_ANYWAY		1
+
 #define EXIT_CODE_OKAY			0
 #define EXIT_CODE_DAEMONIZE		1
 #define EXIT_CODE_NO_INPUT_DEVICE	2
@@ -1460,13 +1462,15 @@ int touch_event_srv_main(int argc, char *argv[])
 				LOG_E("handle request returned with error: %d, request ignored\n", n);
 				continue;
 			}
+#if CMD_REPLY_ANYWAY
 			n = snprintf(res, sizeof(res), "ok\n");
 			n = write(newsockfd, res, n);
 			if (n < 0) {
 				LOG_E("ERROR write to socket, restarting server\n");
 				break;
 			}
-			LOG_D("sent %d bytes: %s\n", n, res);
+			LOG_V("sent %d bytes: %s\n", n, res);
+#endif /* CMD_REPLY_ANYWAY */
 		}
 		close_server(sockfd, newsockfd);
 	} while(running);
