@@ -1066,6 +1066,75 @@ static void adjust_resolution_factor(struct touchscreen_device* touch_dev)
 			touch_dev->prop.abs_y.resolution, client_pad_height);
 }
 
+/*
+ * service to be started using command "am startservice":
+ * com.tandemg.pd40_background_service/
+ * com.tandemg.pd40_background_service.PD40LocationService
+ */
+
+static const char* bgs_pkg = "com.tandemg.pd40_background_service";
+static const char* bgs_name = "PD40LocationService";
+
+static void start_pd40background_services() {
+	char cmd[256];
+	LOG_I("starting pd40 background services\n");
+
+	sprintf(cmd, "am startservice %s/%s.%s",
+		bgs_pkg,
+		bgs_pkg,
+		bgs_name);
+	system(cmd);
+}
+
+static void ping_pd40background_services() {
+	start_pd40background_services();
+}
+
+static void send_intent_pd40background_services(const char* args) {
+	char cmd[1024];
+
+	sprintf(cmd, "am startservice %s %s/%s.%s",
+		args,
+		bgs_pkg,
+		bgs_pkg,
+		bgs_name);
+	system(cmd);
+}
+
+static int send_location_event(const char* buf) {
+	int provider;
+	char time[32];
+	double latitude, longitude, altitude;
+	float accuracy, bearing, speed;
+	char cmd[512];
+	int l = 0;
+
+	LOG_D("location details: %s\n", buf);
+
+	sscanf(buf, "%d %s %lf %lf %lf %f %f %f",
+		    &provider,
+		    time,
+		    &latitude,
+		    &longitude,
+		    &altitude,
+		    &accuracy,
+		    &bearing,
+		    &speed);
+
+	l += sprintf(cmd+l, "--es Provider %d ", provider);
+	l += sprintf(cmd+l, "--es Time %s ", time);
+	l += sprintf(cmd+l, "--es Latitude %lf ", latitude);
+	l += sprintf(cmd+l, "--es Longitude %lf ", longitude);
+	l += sprintf(cmd+l, "--es Altitude %lf ", altitude);
+	l += sprintf(cmd+l, "--es Accuracy %f ", accuracy);
+	l += sprintf(cmd+l, "--es Bearing %f ", bearing);
+	l += sprintf(cmd+l, "--es Speed %f ", speed);
+
+	send_intent_pd40background_services(cmd);
+
+	return 0;
+}
+
 static int handle_request(struct system_devices* devices, const char* req, int req_len)
 {
 	struct touchscreen_device* touch_dev = devices->touch_dev;
@@ -1203,6 +1272,11 @@ static int handle_request(struct system_devices* devices, const char* req, int r
 			sscanf(p+2, "%d %d %d", &mtype, &mx, &my);
 			LOG_D("mouse event, type=%d, x=%d, y=%d\n", mtype, mx, my);
 			send_mouse_event(mouse_dev->fd, (unsigned char)mtype, mx, my);
+			break;
+               case 'L':
+			LOG_D("LOCATION event\n");
+
+			send_location_event(p+2);
 			break;
 		default:
 			LOG_E("args error\n");
@@ -1351,6 +1425,7 @@ int touch_event_srv_main(int argc, char *argv[])
 		exit(EXIT_CODE_NO_INPUT_DEVICE);
 	}
 	adjust_resolution_factor(&touchscreen);
+	start_pd40background_services();
 
 	do {
 		if(start_server(&sockfd, TOUCH_SRV_PORTNO)) {
@@ -1359,11 +1434,13 @@ int touch_event_srv_main(int argc, char *argv[])
 			ret = EXIT_CODE_SOCKET_ERROR;
 			break;
 		}
+		ping_pd40background_services();
 		if(wait_for_connection(sockfd, &newsockfd)) {
 			LOG_E("wait for connection failed, exiting...\n");
 			ret = EXIT_CODE_CONNECTION_FAILURE;
 			break;
 		}
+		ping_pd40background_services();
 		while(1) {
 			bzero(req, TOUCH_SRV_SOCKET_BUFF_SIZE);
 			n = read(newsockfd, req, TOUCH_SRV_SOCKET_BUFF_SIZE);
