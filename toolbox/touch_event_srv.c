@@ -1138,8 +1138,8 @@ static int send_location_event(const char* buf) {
 	return 0;
 }
 
-static int handle_request(struct system_devices* devices, const char* req, int req_len)
-{
+static int parse_request(struct system_devices* devices, const char* req, int req_len) {
+	int ret = 0;
 	struct touchscreen_device* touch_dev = devices->touch_dev;
 	struct gpiokeys_device* gpio_dev = devices->gpio_dev;
 	struct mouse_device* mouse_dev = devices->mouse_dev;
@@ -1148,148 +1148,188 @@ static int handle_request(struct system_devices* devices, const char* req, int r
 	float x, y, pressure;
 	int mtype, mx, my;
 	int kkey, kvalue;
-	int count;
 	const char* p = req;
-	int ret = 0;
 
-	while(1)
-	{
-		const char* eol = strstr(p, "\n");
-		int len;
-
-		if(!eol) {
-			LOG_E("can't find EOL in request");
-			return 1;
-		}
-		len = (eol - p);
-		if(len > req_len)
-		{
-			LOG_E("EOL is found beyond req_len");
-			return 2;
-		}
-		LOG_V("handling message (length: %d)\n", len);
-
-		memset(events, 0, sizeof(events));
-		if(!len) {
-			LOG_E("args error (empty request)\n");
-			return 0;
-		}
-		if(len < 1) {
-			LOG_E("args error, len: %d\n", len);
-			return 3;
-		}
-		switch(*p)
-		{
-		case 'd':
-			sscanf(p+2, "%d %d", &client_pad_height, &client_pad_width);
-			adjust_resolution_factor(touch_dev);
-			LOG_D("Dimensions received, height: %d, width: %d\n", client_pad_height, client_pad_width);
-			break;
-		case 'D':
-			sscanf(p+2, "%f %f %f", &x, &y, &pressure);
-			LOG_D("DOWN: %f %f %f\n", x, y, pressure);
-
-			events[0].type = EV_KEY;
-			events[0].code = BTN_TOUCH;
-			events[0].value = 1; // DOWN
-			events[1].type = EV_ABS;
-			events[1].code = ABS_X;
-			events[1].value = convert_touch_value(x, touch_dev->prop.abs_x, touch_dev->prop.abs_x.resolution, resolution_factor_x);//TOUCHSCREEN_RESOLUTION_X
-			events[2].type = EV_ABS;
-			events[2].code = ABS_Y;
-			events[2].value = convert_touch_value(y, touch_dev->prop.abs_y, touch_dev->prop.abs_y.resolution, resolution_factor_y);//TOUCHSCREEN_RESOLUTION_Y
-			events[3].type = EV_ABS;
-			events[3].code = ABS_PRESSURE;
-			events[3].value = convert_touch_value(pressure, touch_dev->prop.abs_pressure, TOUCHSCREEN_RESOLUTION_PRESSURE, 1);
-			events[4].type = EV_SYN;
-			events[4].code = SYN_REPORT;
-			events[4].value = 0;
-			count = 5;
-			ret = sendevent((struct dummy_dev*)touch_dev, events, count);
-			break;
-		case 'M':
-			sscanf(p+2, "%f %f %f", &x, &y, &pressure);
-			LOG_D("MOVE: %f %f %f\n", x, y, pressure);
-
-			events[0].type = EV_ABS;
-			events[0].code = ABS_X;
-			events[0].value = convert_touch_value(x, touch_dev->prop.abs_x, touch_dev->prop.abs_x.resolution, resolution_factor_x);//TOUCHSCREEN_RESOLUTION_X
-			events[1].type = EV_ABS;
-			events[1].code = ABS_Y;
-			events[1].value = convert_touch_value(y, touch_dev->prop.abs_y, touch_dev->prop.abs_y.resolution, resolution_factor_y);//TOUCHSCREEN_RESOLUTION_Y
-			events[2].type = EV_ABS;
-			events[2].code = ABS_PRESSURE;
-			events[2].value = convert_touch_value(pressure, touch_dev->prop.abs_pressure, TOUCHSCREEN_RESOLUTION_PRESSURE, 1);
-			events[3].type = EV_SYN;
-			events[3].code = SYN_REPORT;
-			events[3].value = 0;
-			count = 4;
-			ret = sendevent((struct dummy_dev*)touch_dev, events, count);
-			break;
-		case 'U':
-			sscanf(p+2, "%f %f %f", &x, &y, &pressure);
-			LOG_D("UP: %f\n", pressure);
-
-			events[0].type = EV_KEY;
-			events[0].code = BTN_TOUCH;
-			events[0].value = 0; // UP
-			events[1].type = EV_ABS;
-			events[1].code = ABS_PRESSURE;
-			events[1].value = convert_touch_value(pressure, touch_dev->prop.abs_pressure, TOUCHSCREEN_RESOLUTION_PRESSURE, 1);
-			events[2].type = EV_SYN;
-			events[2].code = SYN_REPORT;
-			events[2].value = 0;
-			count = 3;
-			ret = sendevent((struct dummy_dev*)touch_dev, events, count);
-			break;
-		case 'B':
-			LOG_D("BACK\n");
-
-			events[0].type = EV_KEY;
-			events[0].code = KEY_BACK;
-			events[0].value = 1; // DOWN
-			events[1].type = EV_SYN;
-			events[1].code = SYN_REPORT;
-			events[1].value = 0;
-			count = 2;
-			ret = sendevent((struct dummy_dev*)gpio_dev, events, count);
-			events[0].value = 0; // UP
-			ret |= sendevent((struct dummy_dev*)gpio_dev, events, count);
-			break;
-		case 'H':
-			LOG_D("HOME\n");
-
-			send_keyboard_event(keyboard_dev->fd, 99, 1);
-			send_keyboard_event(keyboard_dev->fd, 99, 0);
-			break;
-		case 'k':
-			LOG_D("KEYBOARD event\n");
-
-			sscanf(p+2, "%d %d", &kkey, &kvalue);
-			LOG_D("keyboard event, key=%d, value=%d\n", kkey, kvalue);
-			send_keyboard_event(keyboard_dev->fd, kkey, kvalue);
-			break;
-		case 'm':
-			LOG_D("MOUSE event\n");
-
-			sscanf(p+2, "%d %d %d", &mtype, &mx, &my);
-			LOG_D("mouse event, type=%d, x=%d, y=%d\n", mtype, mx, my);
-			send_mouse_event(mouse_dev->fd, (unsigned char)mtype, mx, my);
-			break;
-               case 'L':
-			LOG_D("LOCATION event\n");
-
-			send_location_event(p+2);
-			break;
-		default:
-			LOG_E("args error\n");
-			return 4;
-		}
-
-		p = eol+1;
-		if(*p == '\0')
-			break;
+	if (!devices || !req || req_len < 1) {
+	       LOG_E("parse_request args error\n");
+	       return -1;
 	}
+
+	switch(*p)
+	{
+	case 'd':
+		sscanf(p+2, "%d %d", &client_pad_height, &client_pad_width);
+		adjust_resolution_factor(touch_dev);
+		LOG_D("Dimensions received, height: %d, width: %d\n",
+			client_pad_height,
+			client_pad_width);
+		break;
+
+	case 'D':
+		sscanf(p+2, "%f %f %f", &x, &y, &pressure);
+		LOG_D("DOWN: %f %f %f\n", x, y, pressure);
+
+		events[0].type = EV_KEY;
+		events[0].code = BTN_TOUCH;
+		events[0].value = 1; // DOWN
+		events[1].type = EV_ABS;
+		events[1].code = ABS_X;
+		events[1].value = convert_touch_value(x,
+					touch_dev->prop.abs_x,
+					touch_dev->prop.abs_x.resolution,
+					resolution_factor_x);
+		events[2].type = EV_ABS;
+		events[2].code = ABS_Y;
+		events[2].value = convert_touch_value(y,
+					touch_dev->prop.abs_y,
+					touch_dev->prop.abs_y.resolution,
+					resolution_factor_y);
+		events[3].type = EV_ABS;
+		events[3].code = ABS_PRESSURE;
+		events[3].value = convert_touch_value(pressure,
+					touch_dev->prop.abs_pressure,
+					TOUCHSCREEN_RESOLUTION_PRESSURE,
+					1);
+		events[4].type = EV_SYN;
+		events[4].code = SYN_REPORT;
+		events[4].value = 0;
+		ret = sendevent((struct dummy_dev*)touch_dev, events, 5);
+		break;
+
+	case 'M':
+		sscanf(p+2, "%f %f %f", &x, &y, &pressure);
+		LOG_D("MOVE: %f %f %f\n", x, y, pressure);
+
+		events[0].type = EV_ABS;
+		events[0].code = ABS_X;
+		events[0].value = convert_touch_value(x,
+					touch_dev->prop.abs_x,
+					touch_dev->prop.abs_x.resolution,
+					resolution_factor_x);
+		events[1].type = EV_ABS;
+		events[1].code = ABS_Y;
+		events[1].value = convert_touch_value(y,
+					touch_dev->prop.abs_y,
+					touch_dev->prop.abs_y.resolution,
+					resolution_factor_y);
+		events[2].type = EV_ABS;
+		events[2].code = ABS_PRESSURE;
+		events[2].value = convert_touch_value(pressure,
+					touch_dev->prop.abs_pressure,
+					TOUCHSCREEN_RESOLUTION_PRESSURE,
+					1);
+		events[3].type = EV_SYN;
+		events[3].code = SYN_REPORT;
+		events[3].value = 0;
+		ret = sendevent((struct dummy_dev*)touch_dev, events, 4);
+		break;
+
+	case 'U':
+		sscanf(p+2, "%f %f %f", &x, &y, &pressure);
+		LOG_D("UP: %f\n", pressure);
+
+		events[0].type = EV_KEY;
+		events[0].code = BTN_TOUCH;
+		events[0].value = 0; // UP
+		events[1].type = EV_ABS;
+		events[1].code = ABS_PRESSURE;
+		events[1].value = convert_touch_value(pressure,
+					touch_dev->prop.abs_pressure,
+					TOUCHSCREEN_RESOLUTION_PRESSURE,
+					1);
+		events[2].type = EV_SYN;
+		events[2].code = SYN_REPORT;
+		events[2].value = 0;
+		ret = sendevent((struct dummy_dev*)touch_dev, events, 3);
+		break;
+
+	case 'B':
+		LOG_D("BACK\n");
+
+		events[0].type = EV_KEY;
+		events[0].code = KEY_BACK;
+		events[0].value = 1; // DOWN
+		events[1].type = EV_SYN;
+		events[1].code = SYN_REPORT;
+		events[1].value = 0;
+		ret = sendevent((struct dummy_dev*)gpio_dev, events, 2);
+		events[0].value = 0; // UP
+		ret |= sendevent((struct dummy_dev*)gpio_dev, events, 2);
+		break;
+
+	case 'H':
+		LOG_D("HOME\n");
+
+		ret = send_keyboard_event(keyboard_dev->fd, 99, 1);
+		ret += send_keyboard_event(keyboard_dev->fd, 99, 0);
+		break;
+
+	case 'k':
+		LOG_D("KEYBOARD event\n");
+
+		sscanf(p+2, "%d %d", &kkey, &kvalue);
+		LOG_D("keyboard event, key=%d, value=%d\n", kkey, kvalue);
+		ret = send_keyboard_event(keyboard_dev->fd, kkey, kvalue);
+		break;
+
+	case 'm':
+		LOG_D("MOUSE event\n");
+
+		sscanf(p+2, "%d %d %d", &mtype, &mx, &my);
+		LOG_D("mouse event, type=%d, x=%d, y=%d\n", mtype, mx, my);
+		ret = send_mouse_event(mouse_dev->fd,
+					(unsigned char)mtype,
+					mx,
+					my);
+		break;
+
+       case 'L':
+		LOG_D("LOCATION event\n");
+
+		ret = send_location_event(p+2);
+		break;
+
+	default:
+		LOG_E("unable to determine command\n");
+		return -1;
+	}
+
+	return ret;
+}
+
+static int handle_request(struct system_devices* devices, const char* req, int req_len) {
+	int ret = 0;
+	static char buf[TOUCH_SRV_SOCKET_BUFF_SIZE*2] = { '\0' };
+	static size_t size = 0;
+
+	if (!devices || !req || req_len < 1) {
+	       LOG_E("handle_request args error\n");
+	       return -1;
+	}
+
+	/* verify buffer has enogth space */
+	if((size + req_len) >= (TOUCH_SRV_SOCKET_BUFF_SIZE*2))
+		size = 0;
+
+	memcpy(buf+size, req, req_len);
+	size += req_len;
+
+	while (1) {
+		char* endl = strstr(buf, "\n");
+		size_t len;
+		if (!endl) break;
+		// end of line found
+		len = endl-buf;
+		// check if within the buffer bounderies
+		if(len >= size) break;
+
+		*endl++ = '\0';
+
+		ret += parse_request(devices, buf, len);
+		size -= ++len;
+		memcpy(buf, endl, size);
+	}
+
 	return ret;
 }
 
