@@ -47,9 +47,10 @@
 
 #define LOG(...) do { fprintf(stderr, __VA_ARGS__); } while(0)
 #define LOG_V(string, ...)
-#define LOG_D LOG
-#define LOG_I LOG
-#define LOG_E LOG
+#define LOG_D(string, ...)
+#define LOG_I(...) LOG("I: " __VA_ARGS__)
+#define LOG_W(...) LOG("W: " __VA_ARGS__)
+#define LOG_E(...) LOG("E: " __VA_ARGS__)
 
 struct dummy_dev {
 	char* dev_name;
