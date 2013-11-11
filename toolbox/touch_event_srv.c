@@ -1928,6 +1928,9 @@ static int handle_request(struct system_devices* devices, const char* req,
 			send_keyboard_event(keyboard_dev->fd, 99, 1);
 			send_keyboard_event(keyboard_dev->fd, 99, 0);
 			break;
+		case 'O':
+			system("input keyevent 82");
+			break;
 		case 'k':
 			LOG_D("KEYBOARD event looper\n");
 			for(charIndex = p+2; *charIndex != '\n' ; charIndex++)
