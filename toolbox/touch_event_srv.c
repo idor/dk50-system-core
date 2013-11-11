@@ -54,6 +54,113 @@
 #define LOG_W(...) LOG("W: " __VA_ARGS__)
 #define LOG_E(...) LOG("E: " __VA_ARGS__)
 
+
+//Event types definitions:
+#define AVKBD_KEY_GRAVE 0
+#define AVKBD_KEY_ESC 1
+#define AVKBD_KEY_1 2
+#define AVKBD_KEY_2 3
+#define AVKBD_KEY_3 4
+#define AVKBD_KEY_4 5
+#define AVKBD_KEY_5 6
+#define AVKBD_KEY_6 7
+#define AVKBD_KEY_7 8
+#define AVKBD_KEY_8 9
+#define AVKBD_KEY_9 10
+#define AVKBD_KEY_0 11
+#define AVKBD_KEY_MINUS 12
+#define AVKBD_KEY_EQUAL 13
+#define AVKBD_KEY_BACKSPACE 14
+#define AVKBD_KEY_TAB 15
+#define AVKBD_KEY_Q 16
+#define AVKBD_KEY_W 17
+#define AVKBD_KEY_E 18
+#define AVKBD_KEY_R 19
+#define AVKBD_KEY_T 20
+#define AVKBD_KEY_Y 21
+#define AVKBD_KEY_U 22
+#define AVKBD_KEY_I 23
+#define AVKBD_KEY_O 24
+#define AVKBD_KEY_P 25
+#define AVKBD_KEY_LEFTBRACE 26
+#define AVKBD_KEY_RIGHTBRACE 27
+#define AVKBD_KEY_BACKSLASH 28
+#define AVKBD_KEY_CAPSLOCK 29
+#define AVKBD_KEY_A 30
+#define AVKBD_KEY_S 31
+#define AVKBD_KEY_D 32
+#define AVKBD_KEY_F 33
+#define AVKBD_KEY_G 34
+#define AVKBD_KEY_H 35
+#define AVKBD_KEY_J 36
+#define AVKBD_KEY_K 37
+#define AVKBD_KEY_L 38
+#define AVKBD_KEY_SEMICOLON 39
+#define AVKBD_KEY_APOSTROPHE 40
+#define AVKBD_KEY_ENTER 41
+#define AVKBD_KEY_LEFTSHIFT 42
+#define AVKBD_KEY_Z 43
+#define AVKBD_KEY_X 44
+#define AVKBD_KEY_C 45
+#define AVKBD_KEY_V 46
+#define AVKBD_KEY_B 47
+#define AVKBD_KEY_N 48
+#define AVKBD_KEY_M 49
+#define AVKBD_KEY_COMMA 50
+#define AVKBD_KEY_DOT 51
+#define AVKBD_KEY_SLASH 52
+#define AVKBD_KEY_RIGHTSHIFT 53
+#define AVKBD_KEY_LEFTCTRL 54
+#define AVKBD_KEY_LEFTMETA 55
+#define AVKBD_KEY_LEFTALT 56
+#define AVKBD_KEY_SPACE 57
+#define AVKBD_KEY_RIGHTALT 58
+#define AVKBD_KEY_RIGHTCTRL 59
+#define AVKBD_KEY_UP 60
+#define AVKBD_KEY_DOWN 61
+#define AVKBD_KEY_LEFT 62
+#define AVKBD_KEY_RIGHT 63
+#define AVKBD_KEY_PAGEUP 64
+#define AVKBD_KEY_PAGEDOWN 65
+#define AVKBD_KEY_F1 66
+#define AVKBD_KEY_F2 67
+#define AVKBD_KEY_F3 68
+#define AVKBD_KEY_F4 69
+#define AVKBD_KEY_F5 70
+#define AVKBD_KEY_F6 71
+#define AVKBD_KEY_F7 72
+#define AVKBD_KEY_F8 73
+#define AVKBD_KEY_F9 74
+#define AVKBD_KEY_F10 75
+#define AVKBD_KEY_F11 76
+#define AVKBD_KEY_F12 77
+#define AVKBD_KEY_HOME 78
+#define AVKBD_KEY_END 79
+#define AVKBD_KEY_INSERT 80
+#define AVKBD_KEY_DELETE 81
+#define AVKBD_KEY_SYSRQ 82
+#define AVKBD_KEY_PRINTSCRN AVKBD_KEY_SYSRQ
+#define AVKBD_KEY_KP1 83
+#define AVKBD_KEY_KP2 84
+#define AVKBD_KEY_KP3 85
+#define AVKBD_KEY_KP4 86
+#define AVKBD_KEY_KP5 87
+#define AVKBD_KEY_KP6 88
+#define AVKBD_KEY_KP7 89
+#define AVKBD_KEY_KP8 90
+#define AVKBD_KEY_KP9 91
+#define AVKBD_KEY_KP0 92
+#define AVKBD_KEY_VOLUMEUP 93
+#define AVKBD_KEY_VOLUMEDOWN 94
+#define AVKBD_KEY_MUTE 95
+#define AVKBD_KEY_PLAYPAUSE 96
+#define AVKBD_KEY_PREVIOUSSONG 97
+#define AVKBD_KEY_NEXTSONG 98
+#define AVKBD_KEY_HOMEPAGE 99
+
+#define AVKBD_KEYMAP_SIZE 0x64
+
+
 struct dummy_dev {
 	char* dev_name;
 	int fd;
@@ -1056,7 +1163,7 @@ static int send_mouse_event(int fd, const unsigned char type, const int Xvalue,
 	memcpy(write_buffer + sizeof(char), &Xvalue, sizeof(int));
 	memcpy(write_buffer + sizeof(char) + sizeof(int), &Yvalue, sizeof(int));
 	if (write(fd, write_buffer, sizeof(write_buffer)) != sizeof(write_buffer)) {
-		LOG_E("%s write() error", __FUNCTION__);
+		LOG_E("%s write() error\n", __FUNCTION__);
 		return -1;
 	}
 	return 0;
@@ -1072,6 +1179,507 @@ static int send_keyboard_event(int fd, const unsigned char key,
 		return -1;
 	}
 	return 0;
+}
+static void shiftMod(int fd, int press)
+{
+	if(!send_keyboard_event(fd, AVKBD_KEY_LEFTSHIFT, press)) {
+		LOG_E("%c write() error\n",AVKBD_KEY_LEFTSHIFT);
+	}
+}
+
+static void pressAndRelease(int fd, const unsigned char key){
+	if(!send_keyboard_event(fd,key,1)) {
+		LOG_E("%c write() error\n",key);
+	}
+	if(!send_keyboard_event(fd,key,0)) {
+		LOG_E("%c write() error\n",key);
+	}
+}
+
+static void sendKey(int fd, const char key){
+	switch (key) {
+		case ' ':
+			pressAndRelease(fd,AVKBD_KEY_SPACE);
+		break;
+
+		case '1':
+			pressAndRelease(fd,AVKBD_KEY_1);
+		break;
+
+		case '2':
+			pressAndRelease(fd,AVKBD_KEY_2);
+		break;
+
+		case '3':
+			pressAndRelease(fd,AVKBD_KEY_3);
+		break;
+
+		case '4':
+			pressAndRelease(fd,AVKBD_KEY_4);
+		break;
+
+		case '5':
+			pressAndRelease(fd,AVKBD_KEY_5);
+		break;
+
+		case '6':
+			pressAndRelease(fd,AVKBD_KEY_6);
+		break;
+
+		case '7':
+			pressAndRelease(fd,AVKBD_KEY_7);
+		break;
+
+		case '8':
+			pressAndRelease(fd,AVKBD_KEY_8);
+		break;
+
+		case '9':
+			pressAndRelease(fd,AVKBD_KEY_9);
+		break;
+
+		case '0':
+			pressAndRelease(fd,AVKBD_KEY_0);
+		break;
+
+		case 'q':
+			pressAndRelease(fd,AVKBD_KEY_Q);
+		break;
+
+		case 'w':
+			pressAndRelease(fd,AVKBD_KEY_W);
+		break;
+
+		case 'e':
+			pressAndRelease(fd,AVKBD_KEY_E);
+		break;
+
+		case 'r':
+			pressAndRelease(fd,AVKBD_KEY_R);
+		break;
+
+		case 't':
+			pressAndRelease(fd,AVKBD_KEY_T);
+		break;
+
+		case 'y':
+			pressAndRelease(fd,AVKBD_KEY_Y);
+		break;
+
+		case 'u':
+			pressAndRelease(fd,AVKBD_KEY_U);
+		break;
+
+		case 'i':
+			pressAndRelease(fd,AVKBD_KEY_I);
+		break;
+
+		case 'o':
+			pressAndRelease(fd,AVKBD_KEY_O);
+		break;
+
+		case 'p':
+			pressAndRelease(fd,AVKBD_KEY_P);
+		break;
+
+		case 'a':
+			pressAndRelease(fd,AVKBD_KEY_A);
+		break;
+
+		case 's':
+			pressAndRelease(fd,AVKBD_KEY_S);
+		break;
+
+		case 'd':
+			pressAndRelease(fd,AVKBD_KEY_D);
+		break;
+
+		case 'f':
+			pressAndRelease(fd,AVKBD_KEY_F);
+		break;
+
+		case 'g':
+			pressAndRelease(fd,AVKBD_KEY_G);
+		break;
+
+		case 'h':
+			pressAndRelease(fd,AVKBD_KEY_H);
+		break;
+
+		case 'j':
+			pressAndRelease(fd,AVKBD_KEY_J);
+		break;
+
+		case 'k':
+			pressAndRelease(fd,AVKBD_KEY_K);
+		break;
+
+		case 'l':
+			pressAndRelease(fd,AVKBD_KEY_L);
+		break;
+
+		case 'z':
+			pressAndRelease(fd,AVKBD_KEY_Z);
+		break;
+
+		case 'x':
+			pressAndRelease(fd,AVKBD_KEY_X);
+		break;
+
+		case 'c':
+			pressAndRelease(fd,AVKBD_KEY_C);
+		break;
+
+		case 'v':
+			pressAndRelease(fd,AVKBD_KEY_V);
+		break;
+
+		case 'b':
+			pressAndRelease(fd,AVKBD_KEY_B);
+		break;
+
+		case 'n':
+			pressAndRelease(fd,AVKBD_KEY_N);
+		break;
+
+		case 'm':
+			pressAndRelease(fd,AVKBD_KEY_M);
+		break;
+
+		case '-':
+			pressAndRelease(fd,AVKBD_KEY_MINUS);
+		break;
+
+		case '=':
+			pressAndRelease(fd,AVKBD_KEY_EQUAL);
+		break;
+
+		case '[':
+			pressAndRelease(fd,AVKBD_KEY_LEFTBRACE);
+		break;
+
+		case ']':
+			pressAndRelease(fd,AVKBD_KEY_RIGHTBRACE);
+		break;
+
+		case '\\':
+			pressAndRelease(fd,AVKBD_KEY_BACKSLASH);
+		break;
+
+		case ';':
+			pressAndRelease(fd,AVKBD_KEY_SEMICOLON);
+		break;
+
+		case '\'':
+			pressAndRelease(fd,AVKBD_KEY_APOSTROPHE);
+		break;
+
+		case ',':
+			pressAndRelease(fd,AVKBD_KEY_COMMA);
+		break;
+
+		case '.':
+			pressAndRelease(fd,AVKBD_KEY_DOT);
+		break;
+
+		case '/':
+			pressAndRelease(fd,AVKBD_KEY_SLASH);
+		break;
+
+		case '`':
+			pressAndRelease(fd,AVKBD_KEY_GRAVE);
+		break;
+
+		case 'A':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_A);
+			shiftMod(fd, 0);
+		break;
+
+		case 'B':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_B);
+			shiftMod(fd, 0);
+		break;
+
+		case 'C':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_C);
+			shiftMod(fd, 0);
+		break;
+
+		case 'D':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_D);
+			shiftMod(fd, 0);
+		break;
+
+		case 'E':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_E);
+			shiftMod(fd, 0);
+		break;
+
+		case 'F':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_F);
+			shiftMod(fd, 0);
+		break;
+
+		case 'G':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_G);
+			shiftMod(fd, 0);
+		break;
+
+		case 'H':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_H);
+			shiftMod(fd, 0);
+		break;
+
+		case 'I':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_I);
+			shiftMod(fd, 0);
+		break;
+
+		case 'J':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_J);
+			shiftMod(fd, 0);
+		break;
+
+		case 'K':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_K);
+			shiftMod(fd, 0);
+		break;
+
+		case 'L':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_L);
+			shiftMod(fd, 0);
+		break;
+
+		case 'M':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_M);
+			shiftMod(fd, 0);
+		break;
+
+		case 'N':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_N);
+			shiftMod(fd, 0);
+		break;
+
+		case 'O':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_O);
+			shiftMod(fd, 0);
+		break;
+
+		case 'P':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_P);
+			shiftMod(fd, 0);
+		break;
+
+		case 'Q':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_Q);
+			shiftMod(fd, 0);
+		break;
+
+		case 'R':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_R);
+			shiftMod(fd, 0);
+		break;
+
+		case 'S':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_S);
+			shiftMod(fd, 0);
+		break;
+
+		case 'T':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_T);
+			shiftMod(fd, 0);
+		break;
+
+		case 'U':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_U);
+			shiftMod(fd, 0);
+		break;
+
+		case 'V':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_V);
+			shiftMod(fd, 0);
+		break;
+
+		case 'W':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_W);
+			shiftMod(fd, 0);
+		break;
+
+		case 'X':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_X);
+			shiftMod(fd, 0);
+		break;
+
+		case 'Y':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_Y);
+			shiftMod(fd, 0);
+		break;
+
+		case 'Z':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_Z);
+			shiftMod(fd, 0);
+		break;
+
+		case '!':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_1);
+			shiftMod(fd, 0);
+		break;
+
+		case '@':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_2);
+			shiftMod(fd, 0);
+		break;
+
+		case '#':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_3);
+			shiftMod(fd, 0);
+		break;
+
+		case '$':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_4);
+			shiftMod(fd, 0);
+		break;
+
+		case '%':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_5);
+			shiftMod(fd, 0);
+		break;
+
+		case '^':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_6);
+			shiftMod(fd, 0);
+		break;
+
+		case '&':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_7);
+			shiftMod(fd, 0);
+		break;
+
+		case '*':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_8);
+			shiftMod(fd, 0);
+		break;
+
+		case '(':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_9);
+			shiftMod(fd, 0);
+		break;
+
+		case ')':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_0);
+			shiftMod(fd, 0);
+		break;
+
+		case '_':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_MINUS);
+			shiftMod(fd, 0);
+		break;
+
+		case '+':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_EQUAL);
+			shiftMod(fd, 0);
+		break;
+
+		case '{':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_LEFTBRACE);
+			shiftMod(fd, 0);
+		break;
+
+		case '}':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_RIGHTBRACE);
+			shiftMod(fd, 0);
+		break;
+
+		case '|':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_BACKSLASH);
+			shiftMod(fd, 0);
+		break;
+
+		case ':':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_SEMICOLON);
+			shiftMod(fd, 0);
+		break;
+
+		case '"':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_APOSTROPHE);
+			shiftMod(fd, 0);
+		break;
+
+		case '<':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_COMMA);
+			shiftMod(fd, 0);
+		break;
+
+		case '>':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_DOT);
+			shiftMod(fd, 0);
+		break;
+
+		case '?':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_SLASH);
+			shiftMod(fd, 0);
+		break;
+
+		case '~':
+			shiftMod(fd, 1);
+			pressAndRelease(fd,AVKBD_KEY_GRAVE);
+			shiftMod(fd, 0);
+		break;
+
+		case '\n':
+			pressAndRelease(fd,AVKBD_KEY_ENTER);
+		break;
+
+		default:
+			LOG_E("Error - chracter is not supported\n");
+		break;
+	}
 }
 
 static uint32_t convert_touch_value(float val, struct input_absinfo info,
@@ -1198,6 +1806,7 @@ static int handle_request(struct system_devices* devices, const char* req,
 	int mtype, mx, my;
 	int brightness;
 	int kkey, kvalue;
+	char * charIndex;
 	int count;
 	const char* p = req;
 	int ret = 0;
@@ -1320,11 +1929,12 @@ static int handle_request(struct system_devices* devices, const char* req,
 			send_keyboard_event(keyboard_dev->fd, 99, 0);
 			break;
 		case 'k':
-			LOG_D("KEYBOARD event\n");
-
-			sscanf(p + 2, "%d %d", &kkey, &kvalue);
-			LOG_D("keyboard event, key=%d, value=%d\n", kkey, kvalue);
-			send_keyboard_event(keyboard_dev->fd, kkey, kvalue);
+			LOG_D("KEYBOARD event looper\n");
+			for(charIndex = p+2; *charIndex != '\n' ; charIndex++)
+			{
+				LOG_D("keyboard event, key=%c \n", *(charIndex));
+				sendKey(keyboard_dev->fd , *(charIndex));
+			}
 			break;
 		case 'm':
 			LOG_D("MOUSE event\n");
