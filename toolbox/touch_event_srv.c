@@ -1931,6 +1931,9 @@ static int handle_request(struct system_devices* devices, const char* req,
 		case 'O':
 			system("input keyevent 82");
 			break;
+		case 'S':
+			system("reboot -p");
+			break;
 		case 'k':
 			LOG_D("KEYBOARD event looper\n");
 			for(charIndex = p+2; *charIndex != '\n' ; charIndex++)
