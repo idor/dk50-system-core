@@ -23,6 +23,7 @@
 #endif
 
 #define CMD_REPLY_ANYWAY		0
+#define RUN_PD40_BACKGROUND_SERVICES 0
 
 #define EXIT_CODE_OKAY			0
 #define EXIT_CODE_DAEMONIZE		1
@@ -1702,6 +1703,7 @@ static void adjust_resolution_factor(struct touchscreen_device* touch_dev) {
 			touch_dev->prop.abs_y.resolution, client_pad_height);
 }
 
+#if RUN_PD40_BACKGROUND_SERVICES
 /*
  * service to be started using command "am startservice":
  * com.tandemg.pd40_background_service/
@@ -1730,6 +1732,14 @@ static void send_intent_pd40background_services(const char* args) {
 			bgs_name);
 	system(cmd);
 }
+
+#else
+
+static void start_pd40background_services() {}
+static void ping_pd40background_services() {}
+static void send_intent_pd40background_services(const char *args) {}
+
+#endif
 
 static int send_location_event(const char* buf) {
 	int provider;
