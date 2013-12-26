@@ -1795,6 +1795,30 @@ static int get_brightness_level() { //returns 0-255 brightness value
 	return ret;
 }
 
+static int start_activity(const char* action,
+						  const char* package,
+						  const char* activity) {
+	char cmd[256];
+	char *p = cmd;
+
+	if (!package || !activity) {
+		LOG_E("%s :: invalid arguments, pkg: %s, app: %s\n",
+				__FUNCTION__, package, activity);
+		return -1;
+	}
+
+	p += sprintf(p, "am start ");
+	if(action) {
+		p += sprintf(p, "-a %s ", action);
+	}
+	p += sprintf(p, "-n %s/.%s", package, activity);
+
+	LOG_D("%s :: command to execute: %s\n", __FUNCTION__, cmd);
+	system(cmd);
+
+	return 0;
+}
+
 static int handle_request(struct system_devices* devices, const char* req,
 		int req_len, char * out_args) {
 	struct touchscreen_device* touch_dev = devices->touch_dev;
@@ -1969,6 +1993,14 @@ static int handle_request(struct system_devices* devices, const char* req,
 			}
 			ret = sprintf(out_args, "G %d", (char) get_brightness_level());
 			return ret;
+			break;
+		case 'I': {
+				char action[64], package[64], activity[64];
+				sscanf(p+2, "%s %s %s", package, activity, action);
+				LOG_D("execute intent, package:%s, activity:%s, action:%s\n",
+						package, activity, action);
+				start_activity(action, package, activity);
+			}
 			break;
 
 		default:
