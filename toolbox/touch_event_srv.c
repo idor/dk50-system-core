@@ -1821,8 +1821,9 @@ static int start_activity(const char* action,
 	if(action) {
 		p += sprintf(p, "-a %s ", action);
 	}
-	p += sprintf(p, "-n %s/.%s", package, activity);
-
+	if( *package!=0 && *activity != 0 ) {
+		p += sprintf(p, "-n %s/.%s", package, activity);
+	}
 	LOG_D("%s :: command to execute: %s\n", __FUNCTION__, cmd);
 	system(cmd);
 
@@ -2005,8 +2006,10 @@ static int handle_request(struct system_devices* devices, const char* req,
 			return ret;
 			break;
 		case 'I': {
-				char action[64], package[64], activity[64];
-				sscanf(p+2, "%s %s %s", package, activity, action);
+				char action[64] = {0};
+				char package[64] = {0};
+				char activity[64] = {0};
+				sscanf(p+2, "%s %s %s", action, package, activity);
 				LOG_D("execute intent, package:%s, activity:%s, action:%s\n",
 						package, activity, action);
 				start_activity(action, package, activity);
