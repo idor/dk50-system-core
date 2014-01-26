@@ -1990,8 +1990,12 @@ static int handle_request(struct system_devices* devices, const char* req,
 			LOG_D("BRIGHTNESS_SET event\n");
 			sscanf(p + 2, "%d", &brightness);
 			LOG_D("BRIGHTNESS_SET event, brightness=%d\n", brightness);
-			update_brightness_level(brightness);
-			return 0;
+			if( !update_brightness_level(brightness))
+			{
+				ret = sprintf(out_args, "G %d", (char) get_brightness_level());
+				return 0;
+			}
+			return -1;
 			break;
 		case 'G':
 			LOG_D("BRIGHTNESS_GET event\n");
