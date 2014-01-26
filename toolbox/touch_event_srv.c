@@ -1797,7 +1797,20 @@ static int get_brightness_level() { //returns 0-255 brightness value
 	const char * brightnessFile = "/sys/class/leds/lcd-backlight/brightness";
 	FILE * file = fopen(brightnessFile, "r");
 	if (!file) {
-		LOG_D("Failed opening file");
+		LOG_D("Failed opening brightness file\n");
+		return -1;
+	}
+	fscanf(file, "%d", &ret);
+	fclose(file);
+	return ret;
+}
+
+static int get_battery_level() { //returns 0-100 battery capacity value
+	int ret;
+	const char * batteryFile = "/sys/class/power_supply/bq27500-0/capacity";
+	FILE * file = fopen(batteryFile, "r");
+	if (!file) {
+		LOG_D("Failed opening battery capacity file\n");
 		return -1;
 	}
 	fscanf(file, "%d", &ret);
@@ -2004,6 +2017,15 @@ static int handle_request(struct system_devices* devices, const char* req,
 				return -5;
 			}
 			ret = sprintf(out_args, "G %d", (char) get_brightness_level());
+			return ret;
+			break;
+		case 'S':
+			LOG_D("BATTERY_GET event\n");
+			if (!out_args) {
+				LOG_D("missing output buffer\n");
+				return -5;
+			}
+			ret = sprintf(out_args, "S %d", (char) get_battery_level());
 			return ret;
 			break;
 		case 'I': {
