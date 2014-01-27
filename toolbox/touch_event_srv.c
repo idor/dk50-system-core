@@ -1822,7 +1822,7 @@ static int start_activity(const char* action,
 		p += sprintf(p, "-a %s ", action);
 	}
 	if( *package!=0 && *activity != 0 ) {
-		p += sprintf(p, "-n %s/.%s", package, activity);
+		p += sprintf(p, "-n %s/.%s -S", package, activity);
 	}
 	LOG_D("%s :: command to execute: %s\n", __FUNCTION__, cmd);
 	system(cmd);
