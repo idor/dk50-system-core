@@ -1775,16 +1775,12 @@ static char update_brightness_level(int value) { //returns the nmber of chars wr
 	static char * brightnessFile = "/sys/class/leds/lcd-backlight/brightness";
 	FILE * file = fopen("/sys/class/leds/lcd-backlight/brightness", "w");
 	if (!file) {
-		LOG_D("Failed opening file", value);
+		LOG_E("Failed opening file: %s \n", brightnessFile);
 		return -1;
 	}
-	LOG_D("before writing to file", value);
 	ret = fprintf(file, "%d\n", value);
-	LOG_D("before flushing file", value);
 	fflush(file);
-	LOG_D("before closing file", value);
 	fclose(file);
-	LOG_D("before return\n ", value);
 	sprintf(cmd,
 			"sqlite3 /data/data/com.android.providers.settings/databases/settings.db \"update system set value=%d where name=\'screen_brightness\';\"",
 			value);
@@ -1797,7 +1793,7 @@ static int get_brightness_level() { //returns 0-255 brightness value
 	const char * brightnessFile = "/sys/class/leds/lcd-backlight/brightness";
 	FILE * file = fopen(brightnessFile, "r");
 	if (!file) {
-		LOG_D("Failed opening brightness file\n");
+		LOG_E("Failed opening file: %s \n", brightnessFile);
 		return -1;
 	}
 	fscanf(file, "%d", &ret);
@@ -1810,7 +1806,7 @@ static int get_battery_level() { //returns 0-100 battery capacity value
 	const char * batteryFile = "/sys/class/power_supply/bq27500-0/capacity";
 	FILE * file = fopen(batteryFile, "r");
 	if (!file) {
-		LOG_D("Failed opening battery capacity file\n");
+		LOG_E("Failed opening battery capacity file: %s\n", batteryFile);
 		return -1;
 	}
 	fscanf(file, "%d", &ret);
@@ -1854,7 +1850,7 @@ static int handle_request(struct system_devices* devices, const char* req,
 	int mtype, mx, my;
 	int brightness;
 	int kkey, kvalue;
-	char * charIndex;
+	const char * charIndex;
 	int count;
 	const char* p = req;
 	int ret = 0;
