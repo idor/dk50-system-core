@@ -1059,7 +1059,7 @@ static int find_input_device(struct system_devices* devices) {
 			//gpiokeys_device // dev_name // fd
 			gpio_dev->fd = fd;
 			gpio_dev->dev_name = device_names[i];
-			printf("device %s found: %s\n", name, touch_dev->dev_name);
+			printf("device %s found: %s\n", name, gpio_dev->dev_name);
 			ret--;
 			continue;
 		}
@@ -1151,6 +1151,7 @@ static int sendevent(struct dummy_dev* pdev, struct input_event* events,
 		int ret = write(fd, event, sizeof(struct input_event));
 		if (ret < (int) sizeof(struct input_event)) {
 			fprintf(stderr, "write event failed, %s\n", strerror(errno));
+			LOG_E("write event failed, %s\n", strerror(errno));
 			return -1;
 		}
 	}
@@ -2016,7 +2017,6 @@ static int handle_request(struct system_devices* devices, const char* req,
 			send_location_event(p + 2);
 			break;
 		case 'P':
-			LOG_D("BRIGHTNESS_SET event\n");
 			sscanf(p + 2, "%d", &brightness);
 			LOG_D("BRIGHTNESS_SET event, brightness=%d\n", brightness);
 			if( !update_brightness_level(brightness))
@@ -2221,8 +2221,8 @@ int touch_event_srv_main(int argc, char *argv[]) {
 			n = handle_request(&devices, req, n, res);
 			if (n < 0) {
 				LOG_E(
-						"handle request returned with error: %d, request ignored\n",
-						n);
+						"handle request returned with error: %d, request ignored: %s\n",
+						n,req);
 				continue;
 			} else {
 				n = write(newsockfd, res, n);
