@@ -1809,8 +1809,28 @@ static int get_battery_level() { //returns 0-100 battery capacity value
 		LOG_E("Failed opening battery capacity file: %s\n", batteryFile);
 		return -1;
 	}
+	LOG_I("Battery capacity: %d \n", ret);
 	fscanf(file, "%d", &ret);
 	fclose(file);
+	return ret;
+}
+
+static int is_battery_charging() { //returns 1 while charger is connected
+	int ret = 0;
+	char output[15];
+	const char * batteryStatusFilePath = "/sys/class/power_supply/bq27500-0/status";
+	FILE * statusFile = fopen(batteryStatusFilePath, "r");
+	if (!statusFile) {
+		LOG_E("Failed opening battery status file: %s\n", batteryStatusFilePath);
+		return -1;
+	}
+	fscanf(statusFile, "%s", output);
+	fclose(statusFile);
+	/*file contains either "Discharging" or "Charging"*/
+	LOG_I("Charger status: %s \n", output);
+	if(output[0] == 'C') { // 'C' denotes "Charging"
+		ret = 1;
+	}
 	return ret;
 }
 
@@ -2021,7 +2041,7 @@ static int handle_request(struct system_devices* devices, const char* req,
 				LOG_D("missing output buffer\n");
 				return -5;
 			}
-			ret = sprintf(out_args, "S %d", (char) get_battery_level());
+			ret = sprintf(out_args, "S %d %d", (char) get_battery_level(),(char) is_battery_charging());
 			return ret;
 			break;
 		case 'I': {
