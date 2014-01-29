@@ -1769,7 +1769,7 @@ static int send_location_event(const char* buf) {
 	return 0;
 }
 
-static char update_brightness_level(int value) { //returns the nmber of chars writen(should be 1-3)
+static int update_brightness_level(int value) { //returns the nmber of chars writen(should be 1-3)
 	int ret = 0;
 	char cmd[1024];
 	LOG_D("in update_brightness_level value=%d\n", value);
@@ -2019,12 +2019,13 @@ static int handle_request(struct system_devices* devices, const char* req,
 		case 'P':
 			sscanf(p + 2, "%d", &brightness);
 			LOG_D("BRIGHTNESS_SET event, brightness=%d\n", brightness);
-			if( !update_brightness_level(brightness))
+			if(0 > update_brightness_level(brightness))
 			{
-				ret = sprintf(out_args, "G %d", (char) get_brightness_level());
-				return 0;
+				LOG_E("Failed to set brightness level");
+				return -1;
 			}
-			return -1;
+				ret = sprintf(out_args, "G %d", (char) get_brightness_level());
+				return ret;
 			break;
 		case 'G':
 			LOG_D("BRIGHTNESS_GET event\n");
