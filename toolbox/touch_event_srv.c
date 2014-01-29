@@ -1987,6 +1987,28 @@ static int handle_request(struct system_devices* devices, const char* req,
 			events[0].value = 0; // UP
 			ret |= sendevent((struct dummy_dev*) gpio_dev, events, count);
 			break;
+		case 'w': //press power button
+			LOG_D("PWR_PRESS, key_code: %d\n ",KEY_POWER);
+			events[0].type = EV_KEY;
+			events[0].code = KEY_POWER;
+			events[0].value = 1; // Press
+			events[1].type = EV_SYN;
+			events[1].code = SYN_REPORT;
+			events[1].value = 0;
+			count = 2;
+			ret = sendevent((struct dummy_dev*) gpio_dev, events, count);
+			break;
+		case 'W': //Release power button
+			LOG_D("PWR_RELEASE, key_code: %d\n ",KEY_POWER);
+			events[0].type = EV_KEY;
+			events[0].code = KEY_POWER;
+			events[0].value = 0; // Release
+			events[1].type = EV_SYN;
+			events[1].code = SYN_REPORT;
+			events[1].value = 0;
+			count = 2;
+			ret = sendevent((struct dummy_dev*) gpio_dev, events, count);
+			break;
 		case 'H':
 			LOG_D("HOME\n");
 
