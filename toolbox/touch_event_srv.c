@@ -2046,14 +2046,19 @@ static int handle_request(struct system_devices* devices, const char* req,
 			send_location_event(p + 2);
 			break;
 		case 'P':
+			/* Syntax:
+			 * req: "P [requested value 0-255]"
+			 * res: "P [1|0 - 1 for success ] [current Value]"
+			 */
 			sscanf(p + 2, "%d", &brightness);
 			LOG_D("BRIGHTNESS_SET event, brightness=%d\n", brightness);
 			if(0 > update_brightness_level(brightness))
 			{
 				LOG_E("Failed to set brightness level");
+				ret = sprintf(out_args, "P 0 %d", (char) get_brightness_level());
 				return -1;
 			}
-			ret = sprintf(out_args, "G %d", (char) get_brightness_level());
+			ret = sprintf(out_args, "P 1 %d", (char) get_brightness_level());
 			return ret;
 			break;
 		case 'G':
