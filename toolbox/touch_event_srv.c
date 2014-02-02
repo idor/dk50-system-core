@@ -45,6 +45,13 @@
 #define MOUSE_DEV_NAME "Android Virtual Mouse"
 #define MOUSE_DEV_PATH "/dev/avms"
 
+#define PWR_SUPPLY_PATH "/sys/class/power_supply/bq27500-0"
+#define PWR_SUPPLY_CAPACITY "capacity"
+#define PWR_SUPPLY_STATUS "status"
+
+#define LCD_BACKLIGHT_PATH "/sys/class/leds/lcd-backlight"
+#define LCD_BRIGHTNESS_LEVEL "brightness"
+
 #define KEYBOARD_DEV_NAME "Android Virtual Keyboard"
 #define KEYBOARD_DEV_PATH "/dev/avkbd"
 
@@ -1773,8 +1780,8 @@ static int update_brightness_level(int value) { //returns the nmber of chars wri
 	int ret = 0;
 	char cmd[1024];
 	LOG_D("in update_brightness_level value=%d\n", value);
-	static char * brightnessFile = "/sys/class/leds/lcd-backlight/brightness";
-	FILE * file = fopen("/sys/class/leds/lcd-backlight/brightness", "w");
+	const char * brightnessFile = LCD_BACKLIGHT_PATH "/" LCD_BRIGHTNESS_LEVEL;
+	FILE * file = fopen(brightnessFile, "w");
 	if (!file) {
 		LOG_E("Failed opening file: %s \n", brightnessFile);
 		return -1;
@@ -1791,7 +1798,7 @@ static int update_brightness_level(int value) { //returns the nmber of chars wri
 
 static int get_brightness_level() { //returns 0-255 brightness value
 	int ret;
-	const char * brightnessFile = "/sys/class/leds/lcd-backlight/brightness";
+	const char * brightnessFile = LCD_BACKLIGHT_PATH "/" LCD_BRIGHTNESS_LEVEL;
 	FILE * file = fopen(brightnessFile, "r");
 	if (!file) {
 		LOG_E("Failed opening file: %s \n", brightnessFile);
@@ -1804,7 +1811,7 @@ static int get_brightness_level() { //returns 0-255 brightness value
 
 static int get_battery_level() { //returns 0-100 battery capacity value
 	int ret;
-	const char * batteryFile = "/sys/class/power_supply/bq27500-0/capacity";
+	const char * batteryFile = PWR_SUPPLY_PATH "/" PWR_SUPPLY_CAPACITY;
 	FILE * file = fopen(batteryFile, "r");
 	if (!file) {
 		LOG_E("Failed opening battery capacity file: %s\n", batteryFile);
@@ -1819,7 +1826,7 @@ static int get_battery_level() { //returns 0-100 battery capacity value
 static int is_battery_charging() { //returns 1 while charger is connected
 	int ret = 0;
 	char output[15];
-	const char * batteryStatusFilePath = "/sys/class/power_supply/bq27500-0/status";
+	const char * batteryStatusFilePath = PWR_SUPPLY_PATH "/" PWR_SUPPLY_STATUS;
 	FILE * statusFile = fopen(batteryStatusFilePath, "r");
 	if (!statusFile) {
 		LOG_E("Failed opening battery status file: %s\n", batteryStatusFilePath);
@@ -2046,8 +2053,8 @@ static int handle_request(struct system_devices* devices, const char* req,
 				LOG_E("Failed to set brightness level");
 				return -1;
 			}
-				ret = sprintf(out_args, "G %d", (char) get_brightness_level());
-				return ret;
+			ret = sprintf(out_args, "G %d", (char) get_brightness_level());
+			return ret;
 			break;
 		case 'G':
 			LOG_D("BRIGHTNESS_GET event\n");
@@ -2057,16 +2064,14 @@ static int handle_request(struct system_devices* devices, const char* req,
 			}
 			ret = sprintf(out_args, "G %d", (char) get_brightness_level());
 			return ret;
-			break;
 		case 'S':
-			LOG_D("BATTERY_GET event\n");
+			LOG_D("BATTERY_SET event\n");
 			if (!out_args) {
 				LOG_D("missing output buffer\n");
 				return -5;
 			}
 			ret = sprintf(out_args, "S %d %d", (char) get_battery_level(),(char) is_battery_charging());
 			return ret;
-			break;
 		case 'I': {
 				char action[64] = {0};
 				char package[64] = {0};
