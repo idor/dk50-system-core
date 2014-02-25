@@ -2034,10 +2034,7 @@ static int handle_request(struct system_devices* devices, const char* req,
 			}
 			break;
 		case 'm':
-			LOG_D("MOUSE event\n");
-
 			sscanf(p + 2, "%d %d %d", &mtype, &mx, &my);
-			LOG_D("mouse event, type=%d, x=%d, y=%d\n", mtype, mx, my);
 			send_mouse_event(mouse_dev->fd, (unsigned char) mtype, mx, my);
 			break;
 		case 'L':
