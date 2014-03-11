@@ -10,7 +10,7 @@ static int toolbox_main(int argc, char **argv)
     if (argc > 1) {
         return main(argc - 1, argv + 1);
     } else {
-        printf("Toolbox!\n");
+        printf("Toolbox! build time: %s\n", __DATE__);
         return 0;
     }
 }
