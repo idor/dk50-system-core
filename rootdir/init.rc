@@ -555,3 +555,10 @@ service mdnsd /system/bin/mdnsd
     socket mdnsd stream 0660 mdnsr inet
     disabled
     oneshot
+
+# TDK
+service tdk /system/bin/tdk
+    class main
+    user root
+    group root
+    socket tdk stream 600 system system
