@@ -2033,6 +2033,18 @@ static int handle_request(struct system_devices* devices, const char* req,
 				sendKey(keyboard_dev->fd , *(charIndex));
 			}
 			break;
+
+        case 'v':
+            // AVKBD_KEY_VOLUMEUP 93
+            // AVKBD_KEY_VOLUMEDOWN 94
+            // AVKBD_KEY_MUTE 95
+            LOG_D("Received a Generic keyboard event\n");
+            int asciiValue = 0;
+            if(sscanf(p + 2,"%d" ,&asciiValue) > 0)
+            {
+                pressAndRelease(keyboard_dev->fd, asciiValue);
+            }
+            break;
 		case 'm':
 			sscanf(p + 2, "%d %d %d", &mtype, &mx, &my);
 			send_mouse_event(mouse_dev->fd, (unsigned char) mtype, mx, my);
