@@ -1882,6 +1882,9 @@ static int handle_request(struct system_devices* devices, const char* req,
 	int count;
 	const char* p = req;
 	int ret = 0;
+    int optionsAsciiValue = 0;
+    char cmd[30];
+    int asciiValue = 0;
 
 	while (1) {
 		const char* eol = strstr(p, "\n");
@@ -2023,15 +2026,14 @@ static int handle_request(struct system_devices* devices, const char* req,
 			send_keyboard_event(keyboard_dev->fd, 99, 0);
 			break;
 		case 'O':
-            int optionsAsciiValue = 0;
-            char cmd[30];
-            LOG_D("Received a keyevent command\n");
             if(sscanf(p + 2,"%d" ,&optionsAsciiValue) > 0)
             {
+                LOG_D("Received a keyevent command, with value: %d\n", optionsAsciiValue);
                 sprintf(cmd, "input keyevent %d\n", optionsAsciiValue);
             }
             else
             { //backward compatability to the old 'O' event;
+                LOG_D("Received a keyevent command failing to Options-Btn\n");
                 system("input keyevent 82");
             }
             break;
@@ -2048,11 +2050,14 @@ static int handle_request(struct system_devices* devices, const char* req,
             // AVKBD_KEY_VOLUMEUP 93
             // AVKBD_KEY_VOLUMEDOWN 94
             // AVKBD_KEY_MUTE 95
-            LOG_D("Received a Generic keyboard event\n");
-            int asciiValue = 0;
             if(sscanf(p + 2,"%d" ,&asciiValue) > 0)
             {
+                LOG_D("Received a Generic keyboard event with value: %d\n", asciiValue);
                 pressAndRelease(keyboard_dev->fd, asciiValue);
+            }
+            else
+            {
+                LOG_E("Error Parsing Generic Keyboard event value.");
             }
             break;
 		case 'm':
