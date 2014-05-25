@@ -2023,8 +2023,18 @@ static int handle_request(struct system_devices* devices, const char* req,
 			send_keyboard_event(keyboard_dev->fd, 99, 0);
 			break;
 		case 'O':
-			system("input keyevent 82");
-			break;
+            int optionsAsciiValue = 0;
+            char cmd[30];
+            LOG_D("Received a keyevent command\n");
+            if(sscanf(p + 2,"%d" ,&optionsAsciiValue) > 0)
+            {
+                sprintf(cmd, "input keyevent %d\n", optionsAsciiValue);
+            }
+            else
+            { //backward compatability to the old 'O' event;
+                system("input keyevent 82");
+            }
+            break;
 		case 'k':
 			LOG_D("KEYBOARD event looper\n");
 			for(charIndex = p+2; *charIndex != '\n' ; charIndex++)
