@@ -1842,7 +1842,13 @@ static int is_battery_charging() { //returns 1 while charger is connected
 	return ret;
 }
 
-static int start_activity(const char* action,
+typedef enum {
+START,
+BROADCAST,
+START_SERVICE
+} am_subcommand;
+
+static int start_activity(am_subcommand subCmd ,const char* action,
 						  const char* package,
 						  const char* activity) {
 	char cmd[256];
@@ -1854,7 +1860,19 @@ static int start_activity(const char* action,
 		return -1;
 	}
 
-	p += sprintf(p, "am start ");
+	p += sprintf(p, "am ");
+	switch (subCmd)
+	{
+		case START:
+			p += sprintf(p, "start -S ");
+			break;
+		case BROADCAST:
+			p += sprintf(p, "broadcast ");
+			break;
+		case START_SERVICE:
+			p += sprintf(p, "startservice ");
+			break;
+	}
 	if(action) {
 		p += sprintf(p, "-a %s ", action);
 	}
@@ -2108,7 +2126,27 @@ static int handle_request(struct system_devices* devices, const char* req,
 				sscanf(p+2, "%s %s %s", action, package, activity);
 				LOG_D("execute intent, package:%s, activity:%s, action:%s\n",
 						package, activity, action);
-				start_activity(action, package, activity);
+				start_activity(START,action, package, activity);
+			}
+			break;
+		case 'b': {
+				char action[64] = {0};
+				char package[64] = {0};
+				char activity[64] = {0};
+				sscanf(p+2, "%s %s %s", action, package, activity);
+				LOG_D("execute broadcast with intent, package:%s, activity:%s, action:%s\n",
+						package, activity, action);
+				start_activity(BROADCAST,action, package, activity);
+			}
+			break;
+		case 's': {
+				char action[64] = {0};
+				char package[64] = {0};
+				char activity[64] = {0};
+				sscanf(p+2, "%s %s %s", action, package, activity);
+				LOG_D("execute broadcast with intent, package:%s, activity:%s, action:%s\n",
+						package, activity, action);
+				start_activity(START_SERVICE,action, package, activity);
 			}
 			break;
 
