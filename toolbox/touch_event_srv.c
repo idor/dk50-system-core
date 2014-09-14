@@ -1886,8 +1886,10 @@ int start_activity(am_subcommand subCmd ,const char* action,
 	if( *package!=0 && *activity != 0 ) {
 		p += sprintf(p, "-n %s/.%s -S ", package, activity);
 	}
-	if( *extras != 0) {
-        p += sprintf(p, "%.*s", extrasLength, extras);
+	if(extras) {
+        if( *extras != 0) {
+            p += sprintf(p, "%.*s", extrasLength, extras);
+	    }
 	}
 	LOG_D("%s :: command to execute: %s\n", __FUNCTION__, cmd);
 	system(cmd);
