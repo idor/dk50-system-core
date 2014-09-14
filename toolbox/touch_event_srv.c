@@ -1756,34 +1756,37 @@ static void send_intent_pd40background_services(const char* args) {
 static void start_pd40background_services() {}
 static void ping_pd40background_services() {}
 static void send_intent_pd40background_services(const char *args) {}
-
 #endif
 
 static int send_location_event(const char* buf) {
-	int provider;
-	char time[32];
-	double latitude, longitude, altitude;
-	float accuracy, bearing, speed;
-	char cmd[512];
-	int l = 0;
+    char provider[32];
+    long time;
+    int scanfedValues = 0;
+    double latitude, longitude, altitude;
+    float accuracy, bearing, speed;
+    char cmd[512];
+    int l = 0;
 
 	LOG_D("location details: %s\n", buf);
+   scanfedValues = sscanf(buf, "%s %ld %lf %lf %lf %f %f %f", provider, &time,
+            &latitude, &longitude, &altitude, &accuracy, &bearing, &speed);
+    // "adb shell am startservice -a MockLocationReady -n com.tandemg.pd40locationmocker/.LocationMocker --es Provider gps --el Time 1685211000 --ef Latitude 26.9289183 --ef Longitude 147.7470706 --ef Altitude 46.5797731 --ef Accuracy 402.000000 --ef Bearing 0.000000 --ef Speed 0.000000"
+    if(scanfedValues != 8){
+        LOG_E("scanned: %d != 8 \n Failing to inject GPS Location",
+            scanfedValues);
+        return -1;
+    }
+    l += sprintf(cmd + l, "--es Provider %s ", provider);
+    l += sprintf(cmd + l, "--el Time %ld ", time);
+    l += sprintf(cmd + l, "--ef Latitude %lf ", latitude);
+    l += sprintf(cmd + l, "--ef Longitude %lf ", longitude);
+    l += sprintf(cmd + l, "--ef Altitude %lf ", altitude);
+    l += sprintf(cmd + l, "--ef Accuracy %f ", accuracy);
+    l += sprintf(cmd + l, "--ef Bearing %f ", bearing);
+    l += sprintf(cmd + l, "--ef Speed %f ", speed);
 
-	sscanf(buf, "%d %s %lf %lf %lf %f %f %f", &provider, time, &latitude,
-			&longitude, &altitude, &accuracy, &bearing, &speed);
-
-	l += sprintf(cmd + l, "--es Provider %d ", provider);
-	l += sprintf(cmd + l, "--es Time %s ", time);
-	l += sprintf(cmd + l, "--es Latitude %lf ", latitude);
-	l += sprintf(cmd + l, "--es Longitude %lf ", longitude);
-	l += sprintf(cmd + l, "--es Altitude %lf ", altitude);
-	l += sprintf(cmd + l, "--es Accuracy %f ", accuracy);
-	l += sprintf(cmd + l, "--es Bearing %f ", bearing);
-	l += sprintf(cmd + l, "--es Speed %f ", speed);
-
-	send_intent_pd40background_services(cmd);
-
-	return 0;
+    start_activity(START_SERVICE, "MockLocationReady", "com.tandemg.pd40locationmocker", "LocationMocker" , cmd , l);
+    return 0;
 }
 
 static int update_brightness_level(int value) { //returns the nmber of chars writen(should be 1-3)
