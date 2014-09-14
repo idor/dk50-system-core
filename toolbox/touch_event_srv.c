@@ -2012,17 +2012,7 @@ static int handle_request(struct system_devices* devices, const char* req,
 			break;
 		case 'B':
 			LOG_D("BACK\n");
-
-			events[0].type = EV_KEY;
-			events[0].code = KEY_BACK;
-			events[0].value = 1; // DOWN
-			events[1].type = EV_SYN;
-			events[1].code = SYN_REPORT;
-			events[1].value = 0;
-			count = 2;
-			ret = sendevent((struct dummy_dev*) gpio_dev, events, count);
-			events[0].value = 0; // UP
-			ret |= sendevent((struct dummy_dev*) gpio_dev, events, count);
+            system("input keyevent 4\n");
 			break;
 		case 'w': //press power button
 			LOG_D("PWR_PRESS, key_code: %d\n ",KEY_POWER);
