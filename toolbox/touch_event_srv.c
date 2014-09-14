@@ -230,6 +230,16 @@ enum {
 	PRINT_LABELS = 1U << 16,
 };
 
+typedef enum {
+START,
+BROADCAST,
+START_SERVICE
+} am_subcommand;
+
+int start_activity(am_subcommand subCmd ,const char* action,
+						  const char* package,
+						  const char* activity , const char * extras,
+						  int extrasLength);
 static uint32_t client_pad_height = TOUCHSCREEN_RESOLUTION_Y;
 static uint32_t client_pad_width = TOUCHSCREEN_RESOLUTION_X;
 static struct pollfd *ufds;
@@ -1842,16 +1852,10 @@ static int is_battery_charging() { //returns 1 while charger is connected
 	return ret;
 }
 
-typedef enum {
-START,
-BROADCAST,
-START_SERVICE
-} am_subcommand;
-
-static int start_activity(am_subcommand subCmd ,const char* action,
+int start_activity(am_subcommand subCmd ,const char* action,
 						  const char* package,
-						  const char* activity) {
-	char cmd[256];
+						  const char* activity , const char * extras, int extrasLength) {
+	char cmd[512];
 	char *p = cmd;
 
 	if (!package || !activity) {
@@ -1877,11 +1881,13 @@ static int start_activity(am_subcommand subCmd ,const char* action,
 		p += sprintf(p, "-a %s ", action);
 	}
 	if( *package!=0 && *activity != 0 ) {
-		p += sprintf(p, "-n %s/.%s -S", package, activity);
+		p += sprintf(p, "-n %s/.%s -S ", package, activity);
+	}
+	if( *extras != 0) {
+        p += sprintf(p, "%.*s", extrasLength, extras);
 	}
 	LOG_D("%s :: command to execute: %s\n", __FUNCTION__, cmd);
 	system(cmd);
-
 	return 0;
 }
 
@@ -2126,7 +2132,7 @@ static int handle_request(struct system_devices* devices, const char* req,
 				sscanf(p+2, "%s %s %s", action, package, activity);
 				LOG_D("execute intent, package:%s, activity:%s, action:%s\n",
 						package, activity, action);
-				start_activity(START,action, package, activity);
+				start_activity(START,action, package, activity, NULL,0);
 			}
 			break;
 		case 'b': {
@@ -2136,7 +2142,7 @@ static int handle_request(struct system_devices* devices, const char* req,
 				sscanf(p+2, "%s %s %s", action, package, activity);
 				LOG_D("execute broadcast with intent, package:%s, activity:%s, action:%s\n",
 						package, activity, action);
-				start_activity(BROADCAST,action, package, activity);
+				start_activity(BROADCAST,action, package, activity, NULL,0);
 			}
 			break;
 		case 's': {
@@ -2146,7 +2152,7 @@ static int handle_request(struct system_devices* devices, const char* req,
 				sscanf(p+2, "%s %s %s", action, package, activity);
 				LOG_D("execute broadcast with intent, package:%s, activity:%s, action:%s\n",
 						package, activity, action);
-				start_activity(START_SERVICE,action, package, activity);
+				start_activity(START_SERVICE,action, package, activity, NULL,0);
 			}
 			break;
 
