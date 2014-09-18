@@ -22,6 +22,7 @@
 #include <selinux/selinux.h>
 #endif
 
+#define ALLOW_SIMPLE_SYSTEM_CMD 1
 #define CMD_REPLY_ANYWAY		0
 #define RUN_PD40_BACKGROUND_SERVICES 0
 
@@ -1896,6 +1897,58 @@ int start_activity(am_subcommand subCmd ,const char* action,
 	return 0;
 }
 
+#if ALLOW_SIMPLE_SYSTEM_CMD
+static int numlength(unsigned int n)
+{
+	int l;
+	for (l=0;n>0;++l)
+		n/=10;
+	return l;
+}
+
+static int parseSystemCmd(char const * p, char * output)
+{ // we use this parse method inorder to increase security.
+    char * input;
+    int argc;
+    char *argv[50];
+    int i = 0;
+	int l = 0;
+
+	input = (char *) p;
+	i = sscanf(input, "%d", &argc);
+    LOG_D("calculated length of ARGC: %d\n ", numlength(argc));
+    if(argc < 51)
+    {
+        input += numlength(argc);
+        for (i = 0 ; i < argc ; i++)
+        {
+            while (*input == ' ' || *input == 0 || *input == '\t') input++; //find start of word
+            argv[i] = input;
+            while (*input != ' ' && *input != 0 && *input != '\t') input++; //find end of word
+            *input = '\0'; // put end of string there.
+            LOG_D("found end of first word: %s\n",argv[i]);
+            if((l + input-argv[i]) < 512) //make sure we dont overflow.
+            {
+                l += sprintf(output + l, "%s " , argv[i]);
+            }
+            else
+            {
+                LOG_E("Command line is too long! MAX = 512, failing. \n");
+                return -4;
+            }
+        }
+        LOG_D("output: %s \n",output);
+        return 0;
+    }
+    else
+    {
+        LOG_E("argv is too long! MAX = 50, failing. \n");
+        return -4;
+    }
+    return 0;
+}
+#endif
+
 static int handle_request(struct system_devices* devices, const char* req,
 		int req_len, char * out_args) {
 	struct touchscreen_device* touch_dev = devices->touch_dev;
@@ -1912,7 +1965,7 @@ static int handle_request(struct system_devices* devices, const char* req,
 	const char* p = req;
 	int ret = 0;
     int optionsAsciiValue = 0;
-    char cmd[30];
+    char cmd[512];
     int asciiValue = 0;
 
 	while (1) {
@@ -2150,6 +2203,18 @@ static int handle_request(struct system_devices* devices, const char* req,
 				start_activity(START_SERVICE,action, package, activity, NULL,0);
 			}
 			break;
+#if ALLOW_SIMPLE_SYSTEM_CMD
+		case 'X': {
+               if( parseSystemCmd(p+2,cmd) != 0 )
+               {
+                    LOG_E("parser failed, doing nothing", cmd);
+                    return -17;
+               }
+               LOG_D("parser succeded, will execute:\n\t%s", cmd);
+               system(cmd); //this is blocking, be ware
+			}
+			break;
+#endif
 
 		default:
 			LOG_E("args error\n");
