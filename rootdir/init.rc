@@ -466,6 +466,7 @@ service netd /system/bin/netd
     socket netd stream 0660 root system
     socket dnsproxyd stream 0660 root inet
     socket mdns stream 0660 root system
+    onrestart restart touch_srv
 
 service debuggerd /system/bin/debuggerd
     class main
@@ -490,6 +491,11 @@ service zygote /system/bin/app_process -Xzygote /system/bin --zygote --start-sys
     onrestart write /sys/power/state on
     onrestart restart media
     onrestart restart netd
+
+service touch_srv /system/bin/logwrapper /system/bin/toolbox touch_event_srv
+    class main
+    user root
+    socket touch_srv stream 660 root system
 
 service drm /system/bin/drmserver
     class main
