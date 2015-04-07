@@ -46,6 +46,8 @@
 #define MOUSE_DEV_NAME "Android Virtual Mouse"
 #define MOUSE_DEV_PATH "/dev/avms"
 
+#define PWR_BTN_NAME "qpnp_pon"
+
 #define PWR_SUPPLY_PATH "/sys/class/power_supply/bq27500-0"
 #define PWR_SUPPLY_CAPACITY "capacity"
 #define PWR_SUPPLY_STATUS "status"
@@ -214,6 +216,7 @@ struct system_devices {
 	struct gpiokeys_device* gpio_dev;
 	struct mouse_device* mouse_dev;
 	struct keyboard_device* keyboard_dev;
+	struct gpiokeys_device* qpnp_pon_dev;
 };
 
 enum {
@@ -969,6 +972,7 @@ static int find_input_device(struct system_devices* devices) {
 	struct gpiokeys_device* gpio_dev = devices->gpio_dev;
 	struct mouse_device* mouse_dev = devices->mouse_dev;
 	struct keyboard_device* keyboard_dev = devices->keyboard_dev;
+	struct gpiokeys_device* qpnp_pon_dev = devices->qpnp_pon_dev;
 
 	int c;
 	int i;
@@ -987,9 +991,9 @@ static int find_input_device(struct system_devices* devices) {
 	int64_t last_sync_time = 0;
 	const char *device = NULL;
 	const char *device_path = "/dev/input";
-	int ret = 3;
+	int ret = 4;
 
-	if (!touch_dev || !gpio_dev || !mouse_dev) {
+	if (!touch_dev || !gpio_dev || !mouse_dev || !qpnp_pon_dev ) {
 		fprintf(stderr, "%s :: null argument\n", __FUNCTION__);
 		return -1;
 	}
@@ -1078,6 +1082,13 @@ static int find_input_device(struct system_devices* devices) {
 			gpio_dev->fd = fd;
 			gpio_dev->dev_name = device_names[i];
 			printf("device %s found: %s\n", name, gpio_dev->dev_name);
+			ret--;
+			continue;
+		}
+		if (strstr(name, PWR_BTN_NAME)) {
+			qpnp_pon_dev->fd = fd;
+			qpnp_pon_dev->dev_name = device_names[i];
+			printf("device %s found: %s\n", name, qpnp_pon_dev->dev_name);
 			ret--;
 			continue;
 		}
@@ -1953,6 +1964,7 @@ static int handle_request(struct system_devices* devices, const char* req,
 		int req_len, char * out_args) {
 	struct touchscreen_device* touch_dev = devices->touch_dev;
 	struct gpiokeys_device* gpio_dev = devices->gpio_dev;
+	struct gpiokeys_device* qpnp_pon_dev = devices->qpnp_pon_dev;
 	struct mouse_device* mouse_dev = devices->mouse_dev;
 	struct keyboard_device* keyboard_dev = devices->keyboard_dev;
 	struct input_event events[5];
@@ -2078,7 +2090,7 @@ static int handle_request(struct system_devices* devices, const char* req,
 			events[1].code = SYN_REPORT;
 			events[1].value = 0;
 			count = 2;
-			ret = sendevent((struct dummy_dev*) gpio_dev, events, count);
+			ret = sendevent((struct dummy_dev*) qpnp_pon_dev, events, count);
 			break;
 		case 'W': //Release power button
 			LOG_D("PWR_RELEASE, key_code: %d\n ",KEY_POWER);
@@ -2089,7 +2101,7 @@ static int handle_request(struct system_devices* devices, const char* req,
 			events[1].code = SYN_REPORT;
 			events[1].value = 0;
 			count = 2;
-			ret = sendevent((struct dummy_dev*) gpio_dev, events, count);
+			ret = sendevent((struct dummy_dev*) qpnp_pon_dev, events, count);
 			break;
 		case 'H':
 			LOG_D("HOME\n");
@@ -2327,6 +2339,7 @@ int touch_event_srv_main(int argc, char *argv[]) {
 	char res[TOUCH_SRV_SOCKET_BUFF_SIZE];
 	struct touchscreen_device touchscreen;
 	struct gpiokeys_device gpio;
+	struct gpiokeys_device qpnp_pon;
 	struct mouse_device mouse;
 	struct keyboard_device keyboard;
 	int sockfd, newsockfd;
@@ -2337,6 +2350,7 @@ int touch_event_srv_main(int argc, char *argv[]) {
 	devices.gpio_dev = &gpio;
 	devices.mouse_dev = &mouse;
 	devices.keyboard_dev = &keyboard;
+	devices.qpnp_pon_dev = &qpnp_pon;
 
 	if (daemonize && daemonize_process() != 0) {
 		printf("unable to daemonize process, exiting");
