@@ -70,6 +70,7 @@ TOOLS := \
 	swapoff \
 	mkswap \
 	readlink \
+	toggle_3d_mode \
 	touch_event_srv
 
 ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
