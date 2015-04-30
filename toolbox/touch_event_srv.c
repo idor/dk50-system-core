@@ -58,6 +58,10 @@
 #define KEYBOARD_DEV_NAME "Android Virtual Keyboard"
 #define KEYBOARD_DEV_PATH "/dev/avkbd"
 
+#define FB_DEV_PATH "/sys/devices/virtual/graphics/fb0"
+#define FB_3D_NAME "lumus_resolution_double"
+
+
 #define LOG(...) do { fprintf(stderr, __VA_ARGS__); } while(0)
 #define LOG_V(string, ...)
 #define LOG_D(...) LOG("D: " __VA_ARGS__)
@@ -1834,6 +1838,22 @@ static int get_brightness_level() { //returns 0-255 brightness value
 	return ret;
 }
 
+static int get_protocol_version() {
+    // TODO: implement me aligned with scratchpad verisons.
+    return 0;
+}
+
+static int get_3d_mode() {
+// TODO: implement me
+	const char * ThreeDeeSysfsFile = FB_DEV_PATH "/" FB_3D_NAME;
+	return 1;
+}
+
+static int toggle_3d_mode() {
+	system("toggle_3d_mode");
+	return get_3d_mode();
+}
+
 static int get_battery_level() { //returns 0-100 battery capacity value
 	int ret;
 	const char * batteryFile = PWR_SUPPLY_PATH "/" PWR_SUPPLY_CAPACITY;
@@ -2184,6 +2204,22 @@ static int handle_request(struct system_devices* devices, const char* req,
 				return -5;
 			}
 			ret = sprintf(out_args, "S %d %d", (char) get_battery_level(),(char) is_battery_charging());
+			return ret;
+		case 'T':
+			LOG_D("TOGGLE_3D_CMD event\n");
+			if (!out_args) {
+				LOG_D("missing output buffer\n");
+				return -5;
+			}
+			ret = sprintf(out_args, "T %d", (char) toggle_3d_mode() );
+			return ret;
+		case '3':
+			LOG_D("3D_MODE_GET event\n");
+			if (!out_args) {
+				LOG_D("missing output buffer\n");
+				return -5;
+			}
+			ret = sprintf(out_args, "3 %d", (char) get_3d_mode());
 			return ret;
 		case 'I': {
 				char action[64] = {0};
