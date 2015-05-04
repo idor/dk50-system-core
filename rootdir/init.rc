@@ -262,6 +262,11 @@ on post-fs-data
     # Set indication (checked by vold) that we have finished this action
     #setprop vold.post_fs_data_done 1
 
+    # lumus upload configuration
+    chmod 0770 /system/etc/load_display_conf.sh
+    mkdir /system/etc/display/ 0711 root root
+    exec /system/etc/load_display_conf.sh
+
 on boot
 # basic network init
     ifup lo

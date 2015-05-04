@@ -1,5 +1,12 @@
 LOCAL_PATH:= $(call my-dir)
-
+#######################################
+# Only copy load_display_conf.sh to /system/etc/.
+include $(CLEAR_VARS)
+LOCAL_MODULE := load_display_conf.sh
+LOCAL_SRC_FILES := etc/$(LOCAL_MODULE)
+LOCAL_MODULE_CLASS := ETC
+LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
+include $(BUILD_PREBUILT)
 #######################################
 # init.rc
 # Only copy init.rc if the target doesn't have its own.
