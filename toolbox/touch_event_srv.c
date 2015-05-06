@@ -2197,6 +2197,14 @@ static int handle_request(struct system_devices* devices, const char* req,
 			}
 			ret = sprintf(out_args, "G %d", (char) get_brightness_level());
 			return ret;
+		case 'V':
+			LOG_D("PROTOCOL_VERSION_GET event\n");
+			if (!out_args) {
+				LOG_D("missing output buffer\n");
+				return -5;
+			}
+			ret = sprintf(out_args, "V %d", (char) get_protocol_version() );
+			return ret;
 		case 'S':
 			LOG_D("BATTERY_SET event\n");
 			if (!out_args) {
