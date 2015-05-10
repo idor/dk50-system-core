@@ -36,7 +36,6 @@
 #define TOUCH_SRV_MAX_BACKLOG_CONNECTIONS 5
 #define TOUCH_SRV_SOCKET_BUFF_SIZE	512
 
-#define TOUCHSCREEN_DEV_NAME "TSC2004 Touchscreen"
 #define TOUCHSCREEN_RESOLUTION_X (800)
 #define TOUCHSCREEN_RESOLUTION_Y (480)
 #define TOUCHSCREEN_RESOLUTION_PRESSURE (1)
@@ -997,7 +996,7 @@ static int find_input_device(struct system_devices* devices) {
 	const char *device_path = "/dev/input";
 	int ret = 4;
 
-	if (!touch_dev || !gpio_dev || !mouse_dev || !qpnp_pon_dev ) {
+	if (!gpio_dev || !mouse_dev || !qpnp_pon_dev ) {
 		fprintf(stderr, "%s :: null argument\n", __FUNCTION__);
 		return -1;
 	}
@@ -1096,6 +1095,7 @@ static int find_input_device(struct system_devices* devices) {
 			ret--;
 			continue;
 		}
+#ifdef TOUCHSCREEN_DEV_NAME
 		if (strstr(name, TOUCHSCREEN_DEV_NAME)) {
 			touch_dev->fd = fd;
 			touch_dev->dev_name = device_names[i];
@@ -1164,6 +1164,7 @@ static int find_input_device(struct system_devices* devices) {
 			ret--;
 			continue;
 		}
+#endif //TOUCHSCREEN_DEV_NAME
 	}
 	return ret; // non zero if not found
 }
@@ -2404,7 +2405,8 @@ int touch_event_srv_main(int argc, char *argv[]) {
 	running = 1;
 
 	if (find_input_device(&devices)) {
-		LOG_E("could not find %s device, exiting...\n", TOUCHSCREEN_DEV_NAME);
+		// TODO: why was 'TOUCHSCREEN_DEV_NAME' used here:
+		LOG_E("could not find mandatory device, exiting...\n" );
 		exit(EXIT_CODE_NO_INPUT_DEVICE);
 	}
 	adjust_resolution_factor(&touchscreen);
