@@ -8,6 +8,14 @@ LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
 include $(BUILD_PREBUILT)
 #######################################
+# Only copy load_wled_calib.sh to /system/etc/.
+include $(CLEAR_VARS)
+LOCAL_MODULE := load_wled_calib.sh
+LOCAL_SRC_FILES := etc/$(LOCAL_MODULE)
+LOCAL_MODULE_CLASS := ETC
+LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
+include $(BUILD_PREBUILT)
+#######################################
 # init.rc
 # Only copy init.rc if the target doesn't have its own.
 ifneq ($(TARGET_PROVIDES_INIT_RC),true)

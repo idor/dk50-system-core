@@ -267,6 +267,11 @@ on post-fs-data
     mkdir /system/etc/display/ 0711 root root
     exec /system/etc/load_display_conf.sh
 
+    # lumus wled_calibration:
+    chmod 0770 /system/etc/load_wled_calib.sh
+    mkdir /system/etc/display/ 0711 root root
+    exec /system/etc/load_wled_calib.sh
+
 on boot
 # basic network init
     ifup lo
